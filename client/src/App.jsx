@@ -8,7 +8,12 @@ function App() {
   const [role, setRole] = useState(null); // "host" or "client"
   const [world, setWorld] = useState(null);
   const [puzzleState, setPuzzleState] = useState(null);
-  const [players, setPlayers] = useState([]);
+  const [objects, setObjects] = useState(null);
+  const [playerPositions, setPlayerPositions] = useState(null);
+  const [players, setPlayers] = useState({ host: null, client: null });
+  const playerCount =
+  (players?.host ? 1 : 0) + (players?.client ? 1 : 0);
+
   const [dialog, setDialog] = useState({
     open: false,
     title: "",
@@ -22,7 +27,7 @@ function App() {
     network.on("gameCreated", ({ roomId, role }) => {
       setRole(role);
       setConnected(true);
-      setPlayers([network.playerId]);
+      setPlayers({ host: network.playerId, client: null });
       setDialog({
         open: true,
         title: "Game Created",
@@ -33,40 +38,29 @@ function App() {
     // somebody joined (fires on both host + client)
     network.on("playerJoined", ({ roomId, players }) => {
       setPlayers(players); // 🔹 update on both tabs
-
-      if (!network.isHost && role !== "host") {
-        setRole("client");
-        setConnected(true);
-      }
-
       console.log("Joined room", roomId, "players:", players);
     });
 
     // initial world & puzzle state
-    network.on("roomState", ({ world, puzzleState }) => {
+    network.on("roomState", ({ world, puzzleState, objects, playerPositions }) => {
       if (world !== undefined) setWorld(world);
       if (puzzleState !== undefined) setPuzzleState(puzzleState);
-      console.log("Room state received:", { world, puzzleState });
+      if (objects !== undefined) setObjects(objects);
+      if (playerPositions !== undefined) setPlayerPositions(playerPositions);
+
+      console.log("Room state received:", {
+        world,
+        puzzleState,
+        objects,
+        playerPositions
+      });
     });
+
 
     // 🔹 when someone leaves but room stays alive
-    network.on("playerLeft", ({ roomId, leftPlayerId, players }) => {
-      setPlayers(players || []);
+    network.on("playerLeft", ({leftPlayerId, players }) => {
+      setPlayers(players || { host: null, client: null });
       console.log("Player left:", leftPlayerId, "remaining:", players);
-    });
-
-    // 🔹 when host closes and room is destroyed
-    network.on("roomClosed", ({ roomId }) => {
-      setDialog({
-        open: true,
-        title: "Room Closed",
-        message: `The host left. Room ${roomId} was closed.`,
-      });
-      setConnected(false);
-      setRole(null);
-      setPlayers([]);
-      setWorld(null);
-      setPuzzleState(null);
     });
 
     // join errors
@@ -77,6 +71,12 @@ function App() {
         message,
       });
     });
+
+    network.on("roleAssigned", ({ role }) => {
+      setRole(role);        // host / client
+      setConnected(true);   // we now know we’re in a room
+    });
+
   }, [network, role]);
 
 
@@ -95,6 +95,12 @@ function App() {
     }
     network.joinGame(roomIdInput.trim());
   };
+
+  const isWaitingForSecondPlayer =
+    role === "host" &&
+    dialog.open &&
+    dialog.title === "Game Created" &&
+    playerCount < 2;
 
   return (
     <>
@@ -155,8 +161,18 @@ function App() {
               {dialog.message}
             </p>
             <div style={{ textAlign: "right" }}>
-              <button onClick={() => setDialog((d) => ({ ...d, open: false }))}>
-                Close
+              <button
+                disabled={isWaitingForSecondPlayer}
+                onClick={() => {
+                  if (isWaitingForSecondPlayer) return; // extra safety
+                  setDialog((d) => ({ ...d, open: false }));
+                }}
+                style={{
+                  opacity: isWaitingForSecondPlayer ? 0.6 : 1,
+                  cursor: isWaitingForSecondPlayer ? "not-allowed" : "pointer",
+                }}
+              >
+                {isWaitingForSecondPlayer ? "Waiting for Player 2..." : "Close"}
               </button>
             </div>
           </div>
@@ -170,6 +186,8 @@ function App() {
             role={role}
             world={world}
             puzzleState={puzzleState}
+            objects={objects}
+            playerPositions={playerPositions}
           />
       )}
       {connected && (
@@ -188,7 +206,7 @@ function App() {
         >
           <div>Room: {network.getRoomId?.() ?? network.roomId}</div>
           <div>Role: {role ?? network.getRole?.()}</div>
-          <div>Players: {players.length}</div>
+          <div>Players: {playerCount}</div>
         </div>
       )}
 

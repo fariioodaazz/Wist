@@ -30,7 +30,7 @@ export class NetworkClient {
       roomState: [],
       connected: [],
       disconnected: [],
-      roomClosed: [],
+      roleAssigned: [],
     };
 
     this._registerCoreHandlers();
@@ -99,16 +99,6 @@ export class NetworkClient {
         });
     });
 
-    this.socket.on("roomClosed", ({ roomId }) => {
-        console.log("Room closed by host:", roomId);
-        this.roomId = null;
-        this.players = [];
-        this.hostId = null;
-        this.clientId = null;
-
-        this._emitLocal("roomClosed", { roomId });
-    });
-
 
     this.socket.on("roomState", (state) => {
       // state might contain puzzleState, world, objects, etc.
@@ -126,7 +116,12 @@ export class NetworkClient {
     this.socket.on("puzzleStateChanged", (puzzleState) => {
       this._emitLocal("puzzleStateChanged", puzzleState);
     });
-;
+
+    this.socket.on("roleAssigned", ({ roomId, role }) => {
+        this.isHost = role === "host";
+        console.log("Role assigned:", role, "for room", roomId);
+        this._emitLocal("roleAssigned", { roomId, role });
+    });
   }
 
   // ───────────────────────────
