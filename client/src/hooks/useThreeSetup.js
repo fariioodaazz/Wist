@@ -5,7 +5,7 @@ import * as THREE from "three";
 import Player from "../components/player/Player.js";
 import { loadAllLevels } from "../components/Levels.js";
 
-export function useThreeSetup({ containerRef, threeRef, network }) {
+export function useThreeSetup({ containerRef, threeRef, network, role }) {
   useEffect(() => {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -76,6 +76,7 @@ export function useThreeSetup({ containerRef, threeRef, network }) {
       gravity: -50,
       network,
       otherPlayer: remotePlayer,
+      role,
     });
 
     threeRef.current = {

@@ -4,43 +4,54 @@ export function loadLevel2() {
   const group = new THREE.Group();
   const platforms = [];
 
-  const ground = new THREE.Mesh(
-    new THREE.BoxGeometry(20, 2, 20),
-    new THREE.MeshStandardMaterial({ color: "lightblue" })
-  );
+  const geometry = new THREE.BoxGeometry(20, 2, 10);
+  const material = new THREE.MeshBasicMaterial({ color: 0xd442f5 });
 
-  ground.position.y = 0;
-  group.add(ground);
-  platforms.push(ground);
+  const p1 = new THREE.Mesh(geometry, material);
+  p1.position.z = 0;
+  group.add(p1);
+  platforms.push(p1);
 
-  const block = new THREE.Mesh(
-    new THREE.BoxGeometry(5, 5, 5),
-    new THREE.MeshStandardMaterial({ color: "blue" })
-  );
+  const p2 = new THREE.Mesh(geometry, material);
+  p2.position.z = -10;
+  p2.position.y = 5;
+  group.add(p2);
+  platforms.push(p2);
 
-  block.position.y = 0;
-  block.userData.isPushable = true;
-  group.add(block);
-  platforms.push(block);
-  block.userData.id = "block1";
-  block.userData.initialPosition = block.position.clone();
+  const p3Geometry = new THREE.BoxGeometry(10, 1, 10);
+  const p3 = new THREE.Mesh(p3Geometry, material);
+  p3.position.z = -20;
+  p3.position.x = 5;
+  p3.position.y = 12;
+  group.add(p3);
+  platforms.push(p3);
 
-  // const ground1 = new THREE.Mesh(
-  //   new THREE.BoxGeometry(50, 2, 50),
-  //   new THREE.MeshStandardMaterial({ color: "lightblue" })
-  // );
+  const sideWallGeometry = new THREE.BoxGeometry(2, 50, 160);
+  const backwallMaterial = new THREE.MeshBasicMaterial({
+    color: "lightblue",
+    transparent: true,
+    opacity: 1.0,
+  });
 
-  // ground1.position.z = -60;
-  // group.add(ground1);
-  // platforms.push(ground1);
+  const backwall = new THREE.Mesh(sideWallGeometry, backwallMaterial);
+  backwall.position.x = -11;
+  backwall.position.y = 24;
+  backwall.position.z = -10;
+  group.add(backwall);
+  platforms.push(backwall);
 
-  const geometry = new THREE.TetrahedronGeometry(20, 2, 20);
-  const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-  const tetrahedron = new THREE.Mesh(geometry, material);
-  tetrahedron.position.y = 0;
-  tetrahedron.position.z = -60;
-  group.add(tetrahedron);
-  platforms.push(tetrahedron);
+  const invisibleWalls = new THREE.MeshBasicMaterial({
+    color: "lightblue",
+    transparent: true,
+    opacity: 0.0,
+  });
+
+  const frontwall = new THREE.Mesh(sideWallGeometry, invisibleWalls);
+  frontwall.position.x = 11;
+  frontwall.position.y = 24;
+  frontwall.position.z = -25;
+  group.add(frontwall);
+  platforms.push(frontwall);
 
   return { group, platforms };
 }
