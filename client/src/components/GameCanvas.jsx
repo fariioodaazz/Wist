@@ -3,8 +3,9 @@ import { useRef } from "react";
 import * as THREE from "three";
 
 import { useThreeSetup } from "../hooks/useThreeSetup.js";
-import { useRoleColors } from "../hooks/useRoleColors.js";
+import { useRoleSetup } from "../hooks/useRoleSetup.js";
 import { useWorldStateSync } from "../hooks/useWorldStateSync.js";
+import { useRoleAudio } from "../hooks/useRoleAudio.js";
 
 export default function GameCanvas({
   network,
@@ -31,7 +32,7 @@ export default function GameCanvas({
 
   useThreeSetup({ containerRef, threeRef, network });
 
-  useRoleColors({ role, threeRef });
+  useRoleSetup({ role, threeRef });
 
   useWorldStateSync({
     world,
@@ -41,6 +42,8 @@ export default function GameCanvas({
     playerPositions,
     threeRef,
   });
+
+  useRoleAudio({ role, world });
 
   return (
     <div
