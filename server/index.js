@@ -45,8 +45,8 @@ io.on("connection", (socket) => {
 
     const world = {
       spawnPoints: {
-        host: { x: -2, y: 0.5, z: 0 },
-        client: { x: 2, y: 0.5, z: 0 },
+        host: { x: -2, y: 3, z: 0 },
+        client: { x: 2, y: 3, z: 0 },
       },
       blocks: {
         block_1: { x: 0, y: 0.5, z: -2 },
@@ -63,7 +63,7 @@ io.on("connection", (socket) => {
         host: socket.id,
         client: null,
       },
-      puzzleState: { level: 1 },
+      puzzleState: { level: 1, respawnToken: 0 },
       world,
       objects: { ...world.blocks },
       playerPositions: {
@@ -145,8 +145,7 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    const identity =
-      socket.id === room.players.host ? "host" : "client";
+    const identity = socket.id === room.players.host ? "host" : "client";
 
     room.playerPositions[identity] = position;
 
