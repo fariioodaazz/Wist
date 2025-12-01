@@ -82,5 +82,12 @@ export function useWorldStateSync({
     //
     //   mesh.position.set(x, y, z);
     // });
-  }, [world, role, puzzleState, threeRef]);
+  }, [
+    world,
+    role,
+    puzzleState,
+    puzzleState?.level,
+    puzzleState?.respawnToken,
+    threeRef,
+  ]);
 }

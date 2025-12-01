@@ -47,19 +47,19 @@ export function loadLevel1() {
   group.add(p5);
   platforms.push(p5);
 
-  const floorGeometry = new THREE.BoxGeometry(200, 2, 200);
-  const material3 = new THREE.MeshBasicMaterial({
-    color: "blue",
-    transparent: true,
-    opacity: 1.0,
-  });
+  // const floorGeometry = new THREE.BoxGeometry(200, 2, 200);
+  // const material3 = new THREE.MeshBasicMaterial({
+  //   color: "blue",
+  //   transparent: true,
+  //   opacity: 1.0,
+  // });
 
-  const floor = new THREE.Mesh(floorGeometry, material3);
-  floor.position.y = -30;
-  floor.position.x = 0;
-  floor.position.z = 0;
-  group.add(floor);
-  platforms.push(floor);
+  // // const floor = new THREE.Mesh(floorGeometry, material3);
+  // // floor.position.y = -30;
+  // // floor.position.x = 0;
+  // // floor.position.z = 0;
+  // // group.add(floor);
+  // // platforms.push(floor);
 
   return { group, platforms };
 }

@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import * as THREE from "three";
 
-import Player from "../components/Player.js";
+import Player from "../components/player/Player.js";
 import { loadAllLevels } from "../components/Levels.js";
 
 export function useThreeSetup({ containerRef, threeRef, network }) {

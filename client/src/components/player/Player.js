@@ -1,4 +1,8 @@
+// player/Player.js
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164/build/three.module.js";
+import { PlayerInput } from "./PlayerInput.js";
+import { PLAYER_COLLISION } from "./PlayerConfig.js";
+import { handleCheckpointsAndRespawn } from "./PlayerCheckpoints.js";
 
 export default class Player {
   constructor(scene, platforms, options = {}) {
@@ -6,17 +10,13 @@ export default class Player {
 
     const {
       mesh = null,
-
       geometry = new THREE.BoxGeometry(2, 2, 2),
       material = new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
-
       position = new THREE.Vector3(0, 3, 0),
-
       speed = 20,
       jumpSpeed = 18,
       gravity = -40,
       network = null,
-
       otherPlayer = null,
     } = options;
 
@@ -40,19 +40,20 @@ export default class Player {
     this.gravity = gravity;
     this.onGround = false;
 
+    // Checkpoint flags
+    this._reachedLevel2 = false;
+
     // ====== INPUT ======
-    this.keys = {};
-    window.addEventListener("keydown", (e) => (this.keys[e.code] = true));
-    window.addEventListener("keyup", (e) => (this.keys[e.code] = false));
+    this.input = new PlayerInput();
 
     // ====== COLLISION SETTINGS ======
-    this.playerHalfHeight = 1;
-    this.playerHalfSize = new THREE.Vector3(1, 1, 1);
+    this.playerHalfHeight = PLAYER_COLLISION.HALF_HEIGHT;
+    this.playerHalfSize = PLAYER_COLLISION.HALF_SIZE.clone();
+    this.skin = PLAYER_COLLISION.SKIN;
+    this.rayOriginOffset = PLAYER_COLLISION.RAY_ORIGIN_OFFSET;
+    this.groundEpsilon = PLAYER_COLLISION.GROUND_EPSILON;
 
     this.raycaster = new THREE.Raycaster();
-    this.skin = 0.05;
-    this.rayOriginOffset = 0.1;
-    this.groundEpsilon = 0.05;
   }
 
   castRay(origin, direction, maxDistance) {
@@ -64,13 +65,8 @@ export default class Player {
   }
 
   update(delta) {
-    let moveX = 0,
-      moveZ = 0;
-
-    if (this.keys["KeyW"] || this.keys["ArrowUp"]) moveZ -= 1;
-    if (this.keys["KeyS"] || this.keys["ArrowDown"]) moveZ += 1;
-    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) moveX -= 1;
-    if (this.keys["KeyD"] || this.keys["ArrowRight"]) moveX += 1;
+    // ─────────── INPUT ───────────
+    const { moveX, moveZ, jumpPressed } = this.input.getInputState();
 
     const inputDir = new THREE.Vector3(moveX, 0, moveZ);
 
@@ -84,7 +80,7 @@ export default class Player {
     }
 
     // Jump
-    if ((this.keys["Space"] || this.keys["KeyJ"]) && this.onGround) {
+    if (jumpPressed && this.onGround) {
       this.velocity.y = this.jumpSpeed;
       this.onGround = false;
     }
@@ -95,7 +91,7 @@ export default class Player {
     let deltaPos = this.velocity.clone().multiplyScalar(delta);
     let newPos = this.mesh.position.clone();
 
-    // ── X movement (with pushable support)
+    // ─────────── X movement (with pushable blocks) ───────────
     if (deltaPos.x !== 0) {
       const dirX = new THREE.Vector3(Math.sign(deltaPos.x), 0, 0);
       const originX = new THREE.Vector3(
@@ -105,7 +101,6 @@ export default class Player {
       );
 
       const maxX = this.playerHalfSize.x + this.skin + Math.abs(deltaPos.x);
-
       const hitX = this.castRay(originX, dirX, maxX);
 
       if (hitX) {
@@ -129,6 +124,7 @@ export default class Player {
     }
     newPos.x += deltaPos.x;
 
+    // ─────────── Z movement (with pushable blocks) ───────────
     if (deltaPos.z !== 0) {
       const dirZ = new THREE.Vector3(0, 0, Math.sign(deltaPos.z));
       const originZ = new THREE.Vector3(
@@ -138,7 +134,6 @@ export default class Player {
       );
 
       const maxZ = this.playerHalfSize.z + this.skin + Math.abs(deltaPos.z);
-
       const hitZ = this.castRay(originZ, dirZ, maxZ);
 
       if (hitZ) {
@@ -162,7 +157,7 @@ export default class Player {
     }
     newPos.z += deltaPos.z;
 
-    // ── Vertical
+    // ─────────── Vertical movement & ground/ceiling ───────────
     this.onGround = false;
     let deltaY = deltaPos.y;
 
@@ -210,45 +205,47 @@ export default class Player {
       this.onGround = true;
     }
 
+    // ─────────── Player–player collision (horizontal only) ───────────
     if (this.otherPlayer) {
       const otherPos = this.otherPlayer.position;
 
-      // Only consider horizontal distance (XZ plane)
       const dx = newPos.x - otherPos.x;
       const dz = newPos.z - otherPos.z;
       const distSq = dx * dx + dz * dz;
 
-      const radius = 1.0; // "radius" of each player
-      const minDist = radius * 2; // min center-to-center distance
+      const radius = 1.0;
+      const minDist = radius * 2;
       const minDistSq = minDist * minDist;
 
       if (distSq < minDistSq) {
-        const dist = Math.sqrt(distSq) || 0.0001; // avoid div by zero
+        const dist = Math.sqrt(distSq) || 0.0001;
         const overlap = minDist - dist;
 
-        // Direction from other → this player
         const nx = dx / dist;
         const nz = dz / dist;
 
-        // Push our newPos away just enough so they're not overlapping
         newPos.x += nx * overlap;
         newPos.z += nz * overlap;
       }
-
-      const FALL_LIMIT = -50; // tweak as needed
-      if (newPos.y < FALL_LIMIT) {
-        if (this.network) {
-          this.network.sendPuzzleUpdate({
-            // any value that changes will do; timestamp is easy
-            respawnToken: Date.now(),
-          });
-        }
-        // Don’t apply the falling position; wait for respawn from world sync
-        return;
-      }
     }
 
-    // Finally apply position
+    // ─────────── Checkpoints & Respawn (level logic) ───────────
+    const shouldStop = handleCheckpointsAndRespawn(this, newPos);
+    if (shouldStop) {
+      // We triggered a respawn via network; don't apply this falling position
+      return;
+    }
+
+    // ─────────── Finally apply position ───────────
     this.mesh.position.copy(newPos);
+  }
+
+  /**
+   * Optional, if you ever need to clean up the player completely.
+   */
+  dispose() {
+    if (this.input) {
+      this.input.dispose();
+    }
   }
 }
