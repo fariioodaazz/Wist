@@ -17,13 +17,23 @@ export function handleCheckpointsAndRespawn(player, newPos) {
 
   const currentZ = newPos.z;
 
-  // ───── Checkpoint: Level 2 example ─────
+  // ───── Checkpoint: Level 2  ─────
   if (currentZ < PLAYER_LIMITS.LEVEL2_Z_THRESHOLD && !player._reachedLevel2) {
     player._reachedLevel2 = true;
 
     network.sendPuzzleUpdate({
       levelReached: 2,
-      respawnToken: Date.now(), // also force respawn at start of level 2
+      respawnToken: Date.now(),
+    });
+  }
+
+  // ───── Checkpoint: Level 3  ─────
+  if (currentZ < PLAYER_LIMITS.LEVEL3_Z_THRESHOLD && !player._reachedLevel3) {
+    player._reachedLevel3 = true;
+
+    network.sendPuzzleUpdate({
+      levelReached: 3,
+      respawnToken: Date.now(),
     });
   }
 

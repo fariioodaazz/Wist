@@ -5,16 +5,18 @@ export function loadLevel2() {
   const platforms = [];
 
   const geometry = new THREE.BoxGeometry(20, 2, 10);
-  const material = new THREE.MeshBasicMaterial({ color: 0xd442f5 });
+  const material = new THREE.MeshStandardMaterial({ color: 0xd442f5 });
 
   const p1 = new THREE.Mesh(geometry, material);
   p1.position.z = 0;
+  p1.receiveShadow = true;
   group.add(p1);
   platforms.push(p1);
 
   const p2 = new THREE.Mesh(geometry, material);
   p2.position.z = -10;
   p2.position.y = 5;
+  p2.receiveShadow = true;
   group.add(p2);
   platforms.push(p2);
 
@@ -23,11 +25,12 @@ export function loadLevel2() {
   p3.position.z = -20;
   p3.position.x = 5;
   p3.position.y = 12;
+  p3.receiveShadow = true;
   group.add(p3);
   platforms.push(p3);
 
   const sideWallGeometry = new THREE.BoxGeometry(2, 50, 160);
-  const backwallMaterial = new THREE.MeshBasicMaterial({
+  const backwallMaterial = new THREE.MeshStandardMaterial({
     color: "lightblue",
     transparent: true,
     opacity: 1.0,
@@ -40,7 +43,7 @@ export function loadLevel2() {
   group.add(backwall);
   platforms.push(backwall);
 
-  const invisibleWalls = new THREE.MeshBasicMaterial({
+  const invisibleWalls = new THREE.MeshStandardMaterial({
     color: "lightblue",
     transparent: true,
     opacity: 0.0,

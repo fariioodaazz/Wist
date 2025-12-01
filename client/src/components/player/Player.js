@@ -33,6 +33,9 @@ export default class Player {
       this.mesh.position.copy(position);
     }
 
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+
     scene.add(this.mesh);
 
     // ====== PHYSICS CONFIG ======
@@ -44,6 +47,7 @@ export default class Player {
 
     // Checkpoint flags
     this._reachedLevel2 = false;
+    this._reachedLevel3 = false;
 
     // ====== INPUT ======
     this.input = new PlayerInput();

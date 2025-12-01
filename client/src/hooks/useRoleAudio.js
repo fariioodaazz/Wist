@@ -1,10 +1,6 @@
-// hooks/useRoleAudio.js
 import { useEffect, useRef } from "react";
-
-// You can use the same file for both if you want for now
 import hostTrack from "../assets/audio/Hollow Knight Theme.mp3";
-import clientTrack from "../assets/audio/Hollow Knight Theme.mp3";
-// later: import clientTrack from "../assets/audio/OtherTheme.mp3";
+import clientTrack from "../assets/audio/City of Tears.mp3";
 
 export function useRoleAudio({ role, world }) {
   const audioRef = useRef(null);
@@ -12,7 +8,6 @@ export function useRoleAudio({ role, world }) {
   useEffect(() => {
     if (!role) return;
 
-    // Pick which audio to use (you can also check world/level here)
     const src = role === "host" ? hostTrack : clientTrack;
 
     // Clean up previous audio if any
@@ -28,7 +23,7 @@ export function useRoleAudio({ role, world }) {
     audio.volume = 0.5;
     audioRef.current = audio;
 
-    // --- Autoplay fix: wait for first user interaction ---
+    // Autoplay fix: wait for first user interaction
     const startOnInteraction = () => {
       if (!audioRef.current) return;
 
@@ -55,8 +50,7 @@ export function useRoleAudio({ role, world }) {
         audioRef.current = null;
       }
     };
-  }, [role, world]); // world is here so music can change per level later
+  }, [role, world]);
 
-  // Optional: you can use this ref in a UI to mute/unmute or change volume
   return audioRef;
 }

@@ -33,14 +33,26 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const container = containerRef.current;
     if (container) container.appendChild(renderer.domElement);
 
     // Lights
     const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(10, 20, 10);
+    dirLight.position.set(10, 20, -10);
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     dirLight.castShadow = true;
+    const cam = dirLight.shadow.camera;
+    cam.near = 1;
+    cam.far = 100;
+    cam.left = -50;
+    cam.right = 50;
+    cam.top = 50;
+    cam.bottom = -50;
+    cam.updateProjectionMatrix();
     scene.add(dirLight);
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.3);
@@ -63,6 +75,7 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     );
     remotePlayer.position.set(2, 3, 0);
     remotePlayer.castShadow = true;
+    remotePlayer.receiveShadow = true;
     scene.add(remotePlayer);
 
     // Initial spawn (can be overridden later by world/playerPositions effect)
