@@ -43,7 +43,7 @@ export default function GameCanvas({
     threeRef,
   });
 
-  // useRoleAudio({ role, world });
+  useRoleAudio({ role, world });
 
   return (
     <div

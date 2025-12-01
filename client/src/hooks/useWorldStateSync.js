@@ -8,11 +8,13 @@ const LEVEL_SPAWNS = {
     client: { x: 2, y: 3, z: 0 },
   },
   2: {
-    // 👇 adjust these to match where Level 2 actually starts in your scene
-    host: { x: -2, y: 3, z: -50 },
-    client: { x: 2, y: 3, z: -50 },
+    host: { x: -2, y: 3, z: -80 },
+    client: { x: 2, y: 3, z: -80 },
   },
-  // 3: { ... } // you can add more levels later
+  3: {
+    host: { x: -2, y: 3, z: -140 },
+    client: { x: 2, y: 3, z: -140 },
+  },
 };
 
 export function useWorldStateSync({
