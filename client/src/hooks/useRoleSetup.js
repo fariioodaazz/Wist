@@ -18,8 +18,8 @@ export function useRoleSetup({ role, threeRef }) {
       remoteHex = 0x55ffff;
 
       speed = 8;
-      jumpSpeed = 20;
-      gravity = -50;
+      jumpSpeed = 24;
+      gravity = -40;
     } else if (role === "client") {
       localHex = 0x55ffff;
       remoteHex = 0xff5555;

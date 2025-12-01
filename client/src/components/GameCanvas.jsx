@@ -30,7 +30,7 @@ export default function GameCanvas({
     platforms: [],
   });
 
-  useThreeSetup({ containerRef, threeRef, network });
+  useThreeSetup({ containerRef, threeRef, network, role });
 
   useRoleSetup({ role, threeRef });
 
@@ -43,7 +43,7 @@ export default function GameCanvas({
     threeRef,
   });
 
-  useRoleAudio({ role, world });
+  // useRoleAudio({ role, world });
 
   return (
     <div

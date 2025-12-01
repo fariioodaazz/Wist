@@ -1,28 +1,47 @@
 import * as THREE from "three";
 
-export function loadLevel1() {
+export function loadLevel3() {
   const group = new THREE.Group();
   const platforms = [];
 
-  const p1Geometry = new THREE.BoxGeometry(20, 2, 50);
+  const geometry = new THREE.BoxGeometry(20, 2, 40);
+  const material = new THREE.MeshBasicMaterial({ color: 0x42f5a7 });
 
-  const geometry = new THREE.BoxGeometry(20, 2, 30);
-  const material = new THREE.MeshBasicMaterial({ color: 0xffeeee });
-
-  const p1 = new THREE.Mesh(p1Geometry, material);
-  p1.position.z = 10;
+  const p1 = new THREE.Mesh(geometry, material);
+  p1.position.z = 0;
   group.add(p1);
   platforms.push(p1);
 
   const p2 = new THREE.Mesh(geometry, material);
-  p2.position.z = -38;
+  p2.position.z = -60;
   group.add(p2);
   platforms.push(p2);
 
-  const p3 = new THREE.Mesh(geometry, material);
-  p3.position.z = -75;
-  group.add(p3);
-  platforms.push(p3);
+  const block1 = new THREE.Mesh(
+    new THREE.BoxGeometry(7, 7, 7),
+    new THREE.MeshStandardMaterial({ color: "blue" })
+  );
+
+  block1.position.y = 2;
+  block1.userData.isPushable = true;
+  block1.userData.onlyHostCanPush = true;
+  group.add(block1);
+  platforms.push(block1);
+  block1.userData.id = "block1";
+  block1.userData.initialPosition = block1.position.clone();
+
+  const block2 = new THREE.Mesh(
+    new THREE.BoxGeometry(5, 5, 5),
+    new THREE.MeshStandardMaterial({ color: "lightblue" })
+  );
+
+  block2.position.z = -50;
+
+  block2.userData.isPushable = true;
+  group.add(block2);
+  platforms.push(block2);
+  block2.userData.id = "block2";
+  block2.userData.initialPosition = block2.position.clone();
 
   const sideWallGeometry = new THREE.BoxGeometry(2, 50, 160);
   const backwallMaterial = new THREE.MeshBasicMaterial({
@@ -50,13 +69,6 @@ export function loadLevel1() {
   frontwall.position.z = -25;
   group.add(frontwall);
   platforms.push(frontwall);
-
-  const blockwallGeometry = new THREE.BoxGeometry(20, 50, 2);
-  const blockwall = new THREE.Mesh(blockwallGeometry, invisibleWalls);
-  blockwall.position.z = 5;
-  blockwall.position.x = 5;
-  group.add(blockwall);
-  platforms.push(blockwall);
 
   return { group, platforms };
 }

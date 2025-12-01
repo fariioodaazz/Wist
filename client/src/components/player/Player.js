@@ -18,10 +18,12 @@ export default class Player {
       gravity = -40,
       network = null,
       otherPlayer = null,
+      role = "client",
     } = options;
 
     this.network = network;
     this.otherPlayer = otherPlayer;
+    this.role = role;
 
     if (mesh instanceof THREE.Mesh) {
       this.mesh = mesh;
@@ -107,14 +109,22 @@ export default class Player {
         const hitObj = hitX.object;
 
         if (hitObj.userData && hitObj.userData.isPushable) {
-          hitObj.position.x += deltaPos.x;
+          const onlyHost = !!hitObj.userData.onlyHostCanPush;
+          const canPush = !onlyHost || this.role === "host";
 
-          if (this.network && hitObj.userData.id) {
-            this.network.sendObjectUpdate(hitObj.userData.id, {
-              x: hitObj.position.x,
-              y: hitObj.position.y,
-              z: hitObj.position.z,
-            });
+          if (canPush) {
+            hitObj.position.x += deltaPos.x;
+
+            if (this.network && hitObj.userData.id) {
+              this.network.sendObjectUpdate(hitObj.userData.id, {
+                x: hitObj.position.x,
+                y: hitObj.position.y,
+                z: hitObj.position.z,
+              });
+            }
+          } else {
+            deltaPos.x = 0;
+            this.velocity.x = 0;
           }
         } else {
           deltaPos.x = 0;
@@ -140,14 +150,22 @@ export default class Player {
         const hitObj = hitZ.object;
 
         if (hitObj.userData && hitObj.userData.isPushable) {
-          hitObj.position.z += deltaPos.z;
+          const onlyHost = !!hitObj.userData.onlyHostCanPush;
+          const canPush = !onlyHost || this.role === "host";
 
-          if (this.network && hitObj.userData.id) {
-            this.network.sendObjectUpdate(hitObj.userData.id, {
-              x: hitObj.position.x,
-              y: hitObj.position.y,
-              z: hitObj.position.z,
-            });
+          if (canPush) {
+            hitObj.position.z += deltaPos.z;
+
+            if (this.network && hitObj.userData.id) {
+              this.network.sendObjectUpdate(hitObj.userData.id, {
+                x: hitObj.position.x,
+                y: hitObj.position.y,
+                z: hitObj.position.z,
+              });
+            }
+          } else {
+            deltaPos.z = 0;
+            this.velocity.z = 0;
           }
         } else {
           deltaPos.z = 0;
