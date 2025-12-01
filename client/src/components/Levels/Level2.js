@@ -23,6 +23,7 @@ export function loadLevel2() {
   group.add(block);
   platforms.push(block);
   block.userData.id = "block1";
+  block.userData.initialPosition = block.position.clone();
 
   // const ground1 = new THREE.Mesh(
   //   new THREE.BoxGeometry(50, 2, 50),

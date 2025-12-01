@@ -63,7 +63,7 @@ io.on("connection", (socket) => {
         host: socket.id,
         client: null,
       },
-      puzzleState: { level: 1, respawnToken: 0 },
+      puzzleState: { level: 1, hostLevel: 1, clientLevel: 1, respawnToken: 0 },
       world,
       objects: { ...world.blocks },
       playerPositions: {
@@ -176,10 +176,25 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    room.puzzleState = {
-      ...room.puzzleState,
-      ...puzzleState,
-    };
+    let role = null;
+    if (socket.id === room.players.host) role = "host";
+    else if (socket.id === room.players.client) role = "client";
+
+    if (typeof puzzleState.levelReached === "number" && role) {
+      if (role === "host")
+        room.puzzleState.hostLevel = puzzleState.levelReached;
+      else room.puzzleState.clientLevel = puzzleState.levelReached;
+
+      const hostLevel = room.puzzleState.hostLevel || 1;
+      const clientLevel = room.puzzleState.clientLevel || 1;
+
+      // Shared room level is the LOWER (min) of both players
+      room.puzzleState.level = Math.min(hostLevel, clientLevel);
+    }
+
+    if (typeof puzzleState.respawnToken !== "undefined") {
+      room.puzzleState.respawnToken = puzzleState.respawnToken;
+    }
 
     io.to(roomId).emit("puzzleStateChanged", room.puzzleState);
   });

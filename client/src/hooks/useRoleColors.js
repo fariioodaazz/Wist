@@ -10,11 +10,11 @@ export function useRoleColors({ role, threeRef }) {
     let remoteHex = 0x777777;
 
     if (role === "host") {
-      localHex = 0xff5555; // host = red
-      remoteHex = 0x55ffff; // client = cyan
+      localHex = 0xff5555;
+      remoteHex = 0x55ffff;
     } else if (role === "client") {
-      localHex = 0x55ffff; // client = cyan
-      remoteHex = 0xff5555; // host = red
+      localHex = 0x55ffff;
+      remoteHex = 0xff5555;
     }
 
     player.mesh.material.color.setHex(localHex);
