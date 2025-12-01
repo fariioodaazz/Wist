@@ -22,7 +22,7 @@ export function handleCheckpointsAndRespawn(player, newPos) {
     player._reachedLevel2 = true;
 
     network.sendPuzzleUpdate({
-      level: 2,
+      levelReached: 2,
       respawnToken: Date.now(), // also force respawn at start of level 2
     });
   }
