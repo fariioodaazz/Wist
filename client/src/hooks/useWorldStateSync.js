@@ -24,7 +24,7 @@ export function useWorldStateSync({
   threeRef,
 }) {
   useEffect(() => {
-    const { scene, player, remotePlayer } = threeRef.current || {};
+    const { scene, player, remotePlayer, blocks } = threeRef.current || {};
     if (!scene || !world || !player || !remotePlayer || !role || !puzzleState) {
       return;
     }
@@ -82,6 +82,24 @@ export function useWorldStateSync({
     //
     //   mesh.position.set(x, y, z);
     // });
+
+    if (blocks) {
+      Object.values(blocks).forEach((blockMesh) => {
+        const init = blockMesh.userData?.initialPosition;
+        if (init) {
+          blockMesh.position.copy(init);
+
+          // If this client is the "authoritative" one, sync it to others
+          if (role === "host" && player.network && blockMesh.userData.id) {
+            player.network.sendObjectUpdate(blockMesh.userData.id, {
+              x: blockMesh.position.x,
+              y: blockMesh.position.y,
+              z: blockMesh.position.z,
+            });
+          }
+        }
+      });
+    }
   }, [
     world,
     role,
