@@ -33,6 +33,9 @@ export default class Player {
       this.mesh.position.copy(position);
     }
 
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+
     scene.add(this.mesh);
 
     // ====== PHYSICS CONFIG ======
