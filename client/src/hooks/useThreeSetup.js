@@ -59,7 +59,7 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     scene.add(ambient);
 
     // Load all levels (platforms array)
-    const platforms = loadAllLevels(scene);
+    const platforms = loadAllLevels(scene, role);
     const blocks = {};
     platforms.forEach((p, idx) => {
       if (p.userData && p.userData.isPushable) {

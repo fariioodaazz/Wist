@@ -1,5 +1,7 @@
 // hooks/useRoleColors.js
 import { useEffect } from "react";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import urotsukiUrl from "../assets/Models/urotsuki.glb";
 
 export function useRoleSetup({ role, threeRef }) {
   useEffect(() => {

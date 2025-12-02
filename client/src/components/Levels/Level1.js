@@ -1,27 +1,31 @@
 import * as THREE from "three";
+import { getRoleMaterial } from "../../materials/levelMaterial.js";
 
-export function loadLevel1() {
+export function loadLevel1(role) {
   const group = new THREE.Group();
   const platforms = [];
 
   const p1Geometry = new THREE.BoxGeometry(20, 2, 50);
-
   const geometry = new THREE.BoxGeometry(20, 2, 30);
-  const material = new THREE.MeshStandardMaterial({ color: 0xffeeee });
 
-  const p1 = new THREE.Mesh(p1Geometry, material);
+  const platformMaterial = getRoleMaterial(role, {
+    repeatX: 2,
+    repeatY: 4,
+  });
+
+  const p1 = new THREE.Mesh(p1Geometry, platformMaterial);
   p1.position.z = 10;
   p1.receiveShadow = true;
   group.add(p1);
   platforms.push(p1);
 
-  const p2 = new THREE.Mesh(geometry, material);
+  const p2 = new THREE.Mesh(geometry, platformMaterial);
   p2.position.z = -38;
   p2.receiveShadow = true;
   group.add(p2);
   platforms.push(p2);
 
-  const p3 = new THREE.Mesh(geometry, material);
+  const p3 = new THREE.Mesh(geometry, platformMaterial);
   p3.position.z = -75;
   p3.receiveShadow = true;
   group.add(p3);
