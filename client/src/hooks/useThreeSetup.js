@@ -13,9 +13,7 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const zoom = 14;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x222222);
 
-    // Orthographic isometric camera
     const camera = new THREE.OrthographicCamera(
       -aspect * zoom,
       aspect * zoom,
@@ -37,136 +35,143 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const container = containerRef.current;
     if (container) container.appendChild(renderer.domElement);
 
-    // Lights
     const dirLight = new THREE.DirectionalLight(0xffffff, 1);
     dirLight.position.set(10, 20, 10);
     dirLight.castShadow = true;
     scene.add(dirLight);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
     scene.add(ambient);
 
-    // Load all levels (platforms array)
-    const platforms = loadAllLevels(scene);
-    const blocks = {};
-    platforms.forEach((p, idx) => {
-      if (p.userData && p.userData.isPushable) {
-        const id = p.userData.id || `block-${idx}`;
-        blocks[id] = p;
-      }
-    });
+    const cleanupFns = [];
+    let disposed = false;
 
-    // Remote player cube
-    const remotePlayer = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 2, 2),
-      new THREE.MeshStandardMaterial({ color: 0x777777 })
-    );
-    remotePlayer.position.set(2, 3, 0);
-    remotePlayer.castShadow = true;
-    scene.add(remotePlayer);
+    const init = async () => {
+      const platforms = await loadAllLevels(scene, role);
+      if (!platforms || disposed) return;
 
-    // Initial spawn (can be overridden later by world/playerPositions effect)
-    const spawnPos = new THREE.Vector3(0, 3, 0);
-
-    // Local Player using your Player class
-    const player = new Player(scene, platforms, {
-      position: spawnPos,
-      speed: 10,
-      jumpSpeed: 24,
-      gravity: -50,
-      network,
-      otherPlayer: remotePlayer,
-      role,
-    });
-
-    threeRef.current = {
-      ...threeRef.current,
-      scene,
-      camera,
-      renderer,
-      player,
-      remotePlayer,
-      platforms,
-      blocks,
-      zoom,
-    };
-
-    // Network: remote movement & object updates
-    if (network) {
-      network.on("remotePlayerMove", ({ position }) => {
-        const { remotePlayer } = threeRef.current;
-        if (!remotePlayer) return;
-        remotePlayer.position.set(position.x, position.y, position.z);
+      const blocks = {};
+      platforms.forEach((p, idx) => {
+        if (p.userData && p.userData.isPushable) {
+          const id = p.userData.id || `block-${idx}`;
+          blocks[id] = p;
+        }
       });
 
-      network.on("objectUpdated", ({ objectId, state }) => {
-        const { blocks } = threeRef.current;
-        const mesh = blocks[objectId];
-        if (!mesh || !state) return;
-        mesh.position.set(state.x, state.y, state.z);
+      const remotePlayer = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 2, 2),
+        new THREE.MeshStandardMaterial({ color: 0x777777 })
+      );
+      remotePlayer.position.set(2, 3, 0);
+      remotePlayer.castShadow = true;
+      scene.add(remotePlayer);
+
+      const spawnPos = new THREE.Vector3(0, 3, 0);
+
+      const player = new Player(scene, platforms, {
+        position: spawnPos,
+        speed: 10,
+        jumpSpeed: 24,
+        gravity: -50,
+        network,
+        otherPlayer: remotePlayer,
+        role,
       });
-    }
 
-    // Animation loop
-    const clock = new THREE.Clock();
+      threeRef.current = {
+        ...threeRef.current,
+        scene,
+        camera,
+        renderer,
+        player,
+        remotePlayer,
+        platforms,
+        blocks,
+        zoom,
+        cameraOffset: threeRef.current.cameraOffset || new THREE.Vector3(14, 18, 14),
+      };
 
-    const animate = () => {
-      const { renderer, scene, camera, player, cameraOffset } =
-        threeRef.current;
-      if (!renderer || !scene || !camera || !player) {
-        threeRef.current.animationId = requestAnimationFrame(animate);
-        return;
-      }
-
-      let delta = clock.getDelta();
-      const MAX_DELTA = 0.05;
-      if (delta > MAX_DELTA) delta = MAX_DELTA;
-      if (delta <= 0) {
-        threeRef.current.animationId = requestAnimationFrame(animate);
-        return;
-      }
-
-      player.update(delta);
       if (network) {
-        const p = player.mesh.position;
-        network.sendPlayerMove({ x: p.x, y: p.y, z: p.z });
+        const moveHandler = ({ position }) => {
+          const { remotePlayer: rp } = threeRef.current;
+          if (!rp) return;
+          rp.position.set(position.x, position.y, position.z);
+        };
+        network.on("remotePlayerMove", moveHandler);
+        cleanupFns.push(() => network.off?.("remotePlayerMove", moveHandler));
+
+        const objectHandler = ({ objectId, state }) => {
+          const { blocks: blk } = threeRef.current;
+          const mesh = blk?.[objectId];
+          if (!mesh || !state) return;
+          mesh.position.set(state.x, state.y, state.z);
+        };
+        network.on("objectUpdated", objectHandler);
+        cleanupFns.push(() => network.off?.("objectUpdated", objectHandler));
       }
 
-      // Isometric camera follow
-      camera.position.copy(player.mesh.position).add(cameraOffset);
-      camera.lookAt(player.mesh.position);
+      const clock = new THREE.Clock();
 
-      renderer.render(scene, camera);
-      threeRef.current.animationId = requestAnimationFrame(animate);
+      const animate = () => {
+        const { renderer: r, scene: s, camera: c, player: pl, cameraOffset: co } =
+          threeRef.current;
+        if (!r || !s || !c || !pl) {
+          threeRef.current.animationId = requestAnimationFrame(animate);
+          return;
+        }
+
+        let delta = clock.getDelta();
+        const MAX_DELTA = 0.05;
+        if (delta > MAX_DELTA) delta = MAX_DELTA;
+        if (delta <= 0) {
+          threeRef.current.animationId = requestAnimationFrame(animate);
+          return;
+        }
+
+        pl.update(delta);
+        if (network) {
+          const p = pl.mesh.position;
+          network.sendPlayerMove({ x: p.x, y: p.y, z: p.z });
+        }
+
+        c.position.copy(pl.mesh.position).add(co);
+        c.lookAt(pl.mesh.position);
+
+        r.render(s, c);
+        threeRef.current.animationId = requestAnimationFrame(animate);
+      };
+
+      animate();
     };
 
-    animate();
+    init();
 
-    // Resize
     const onResize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      const aspect = w / h;
-      const { camera, renderer, zoom } = threeRef.current;
-      if (!camera || !renderer) return;
+      const aspectNew = w / h;
+      const { camera: cam, renderer: rend, zoom: zm } = threeRef.current;
+      if (!cam || !rend) return;
 
-      camera.left = -aspect * zoom;
-      camera.right = aspect * zoom;
-      camera.top = zoom;
-      camera.bottom = -zoom;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      cam.left = -aspectNew * zm;
+      cam.right = aspectNew * zm;
+      cam.top = zm;
+      cam.bottom = -zm;
+      cam.updateProjectionMatrix();
+      rend.setSize(w, h);
     };
+
     window.addEventListener("resize", onResize);
 
-    // Cleanup
     return () => {
+      disposed = true;
       cancelAnimationFrame(threeRef.current.animationId);
       window.removeEventListener("resize", onResize);
+      cleanupFns.forEach((fn) => fn && fn());
       renderer.dispose();
       if (container?.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
     };
-  }, [containerRef, threeRef, network]);
+  }, [containerRef, threeRef, network, role]);
 }

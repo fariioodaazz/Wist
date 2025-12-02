@@ -1,8 +1,11 @@
 import * as THREE from "three";
+import { buildLevel3Environment } from "./Level3Environment.js";
 
-export function loadLevel3() {
+export async function loadLevel3(role) {
   const group = new THREE.Group();
   const platforms = [];
+
+  await buildLevel3Environment(group, role);
 
   const geometry = new THREE.BoxGeometry(20, 2, 40);
   const material = new THREE.MeshBasicMaterial({ color: 0x42f5a7 });
@@ -47,7 +50,7 @@ export function loadLevel3() {
   const backwallMaterial = new THREE.MeshBasicMaterial({
     color: "lightblue",
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.0,
   });
 
   const backwall = new THREE.Mesh(sideWallGeometry, backwallMaterial);

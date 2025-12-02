@@ -224,4 +224,23 @@ export class NetworkClient {
       puzzleState: partialPuzzleState,
     });
   }
+
+  /**
+   * Disconnect from the current room/game
+   */
+  disconnect() {
+    if (this.socket && this.socket.connected) {
+      this.socket.disconnect();
+      // Reconnect immediately for potential new games
+      setTimeout(() => {
+        this.socket.connect();
+      }, 100);
+    }
+    // Reset local state
+    this.roomId = null;
+    this.isHost = false;
+    this.players = [];
+    this.hostId = null;
+    this.clientId = null;
+  }
 }
