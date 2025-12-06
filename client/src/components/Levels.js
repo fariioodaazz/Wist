@@ -1,16 +1,17 @@
-import { loadLevel1 } from "./Levels/Level1.js";
-import { loadLevel2 } from "./Levels/Level2.js";
-import { loadLevel3 } from "./Levels/Level3.js";
+import { loadLevel1 } from "./levels/Level1.js";
+import { loadLevel2 } from "./levels/Level2.js";
+import { loadLevel3 } from "./levels/Level3.js";
 
-export async function loadAllLevels(scene, role) {
+export function loadAllLevels(scene, role) {
   let zOffset = 0;
   const allPlatforms = [];
 
   // ---- Level 1 ----
-  const level1 = await loadLevel1(role);
+  const level1 = loadLevel1(role);
 
+  // ensure group exists
   if (!level1 || !level1.group) {
-    console.error("Level1 did not return { group, platforms }");
+    console.error("❌ Level1 did not return { group, platforms }");
     return [];
   }
 
@@ -21,10 +22,10 @@ export async function loadAllLevels(scene, role) {
   zOffset -= 100;
 
   // ---- Level 2 ----
-  const level2 = await loadLevel2(role);
+  const level2 = loadLevel2(role);
 
   if (!level2 || !level2.group) {
-    console.error("Level2 did not return { group, platforms }");
+    console.error("❌ Level2 did not return { group, platforms }");
     return allPlatforms;
   }
 
@@ -35,10 +36,10 @@ export async function loadAllLevels(scene, role) {
   zOffset -= 50;
 
   // ---- Level 3 ----
-  const level3 = await loadLevel3(role);
+  const level3 = loadLevel3(role);
 
   if (!level3 || !level3.group) {
-    console.error("Level3 did not return { group, platforms }");
+    console.error("❌ Level2 did not return { group, platforms }");
     return allPlatforms;
   }
 

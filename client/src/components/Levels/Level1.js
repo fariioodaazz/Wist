@@ -1,34 +1,41 @@
 import * as THREE from "three";
-import { buildLevel1Environment } from "./Level1Environment.js";
+import { getRoleMaterial } from "../../materials/levelMaterial.js";
+// import { buildLevel1Environment } from "./Level1Environment.js";
 
-export async function loadLevel1(role) {
+export function loadLevel1(role) {
   const group = new THREE.Group();
   const platforms = [];
 
-  await buildLevel1Environment(group, role);
+  // await buildLevel1Environment(group, role);
 
   const p1Geometry = new THREE.BoxGeometry(20, 2, 50);
-
   const geometry = new THREE.BoxGeometry(20, 2, 30);
-  const material = new THREE.MeshBasicMaterial({ color: 0xffeeee });
 
-  const p1 = new THREE.Mesh(p1Geometry, material);
+  const platformMaterial = getRoleMaterial(role, {
+    repeatX: 2,
+    repeatY: 4,
+  });
+
+  const p1 = new THREE.Mesh(p1Geometry, platformMaterial);
   p1.position.z = 10;
+  p1.receiveShadow = true;
   group.add(p1);
   platforms.push(p1);
 
-  const p2 = new THREE.Mesh(geometry, material);
+  const p2 = new THREE.Mesh(geometry, platformMaterial);
   p2.position.z = -38;
+  p2.receiveShadow = true;
   group.add(p2);
   platforms.push(p2);
 
-  const p3 = new THREE.Mesh(geometry, material);
+  const p3 = new THREE.Mesh(geometry, platformMaterial);
   p3.position.z = -75;
+  p3.receiveShadow = true;
   group.add(p3);
   platforms.push(p3);
 
   const sideWallGeometry = new THREE.BoxGeometry(2, 50, 160);
-  const backwallMaterial = new THREE.MeshBasicMaterial({
+  const backwallMaterial = new THREE.MeshStandardMaterial({
     color: "lightblue",
     transparent: true,
     opacity: 0.0,
@@ -41,7 +48,7 @@ export async function loadLevel1(role) {
   group.add(backwall);
   platforms.push(backwall);
 
-  const invisibleWalls = new THREE.MeshBasicMaterial({
+  const invisibleWalls = new THREE.MeshStandardMaterial({
     color: "lightblue",
     transparent: true,
     opacity: 0.0,
