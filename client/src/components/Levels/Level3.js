@@ -1,9 +1,12 @@
 import * as THREE from "three";
 import { getRoleMaterial } from "../../materials/levelMaterial.js";
+// import { buildLevel3Environment } from "./Level3Environment.js";
 
 export function loadLevel3(role) {
   const group = new THREE.Group();
   const platforms = [];
+
+  // await buildLevel3Environment(group, role);
 
   const geometry = new THREE.BoxGeometry(20, 2, 40);
   const platformMaterial = getRoleMaterial(role, {
@@ -60,7 +63,7 @@ export function loadLevel3(role) {
   const backwallMaterial = new THREE.MeshStandardMaterial({
     color: "lightblue",
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.0,
   });
 
   const backwall = new THREE.Mesh(sideWallGeometry, backwallMaterial);

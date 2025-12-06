@@ -45,8 +45,8 @@ io.on("connection", (socket) => {
 
     const world = {
       spawnPoints: {
-        host: { x: -2, y: 3, z: 0 },
-        client: { x: 2, y: 3, z: 0 },
+        host: { x: -1, y: 3, z: 0 },
+        client: { x: 1, y: 3, z: 0 },
       },
       blocks: {
         block_1: { x: 0, y: 0.5, z: -2 },
