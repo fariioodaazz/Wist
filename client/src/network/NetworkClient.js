@@ -11,6 +11,7 @@ export class NetworkClient {
     this.playerId = null; // your own socket id (on connect)
     this.hostId = null;   // first player in room
     this.clientId = null; // second player in room (if any)
+    this.userId = null;
 
     // For throttling movement updates
     this._lastMove = {
@@ -31,6 +32,11 @@ export class NetworkClient {
       connected: [],
       disconnected: [],
       roleAssigned: [],
+      createError: [],
+      gameClosed: [],
+      inviteError: [],
+      inviteSent: [],
+      inviteReceived: [],
     };
 
     this._registerCoreHandlers();
@@ -72,33 +78,32 @@ export class NetworkClient {
     });
 
     this.socket.on("playerJoined", ({ roomId, players }) => {
-        this.roomId = roomId;
-        this.players = players;
+      this.roomId = roomId;
+      this.players = players;
 
-        this.hostId = players[0] ?? null;
-        this.clientId = players[1] ?? null;
+      this.hostId = players?.host ?? null;
+      this.clientId = players?.client ?? null;
 
-        console.log("Players in room:", players);
-        this._emitLocal("playerJoined", {
-            roomId,
-            players,
-            hostId: this.hostId,
-            clientId: this.clientId,
-        });
+      console.log("Players in room:", players);
+      this._emitLocal("playerJoined", {
+        roomId,
+        players,
+        hostId: this.hostId,
+        clientId: this.clientId,
+      });
     });
 
     this.socket.on("playerLeft", ({ roomId, leftPlayerId, players }) => {
-        this.roomId = roomId;
-        this.players = players || [];      // 🔹 keep client-side players array in sync
-        console.log("Player left:", leftPlayerId, "Remaining:", this.players);
+      this.roomId = roomId;
+      this.players = players || { host: null, client: null };
+      console.log("Player left:", leftPlayerId, "Remaining:", this.players);
 
-        this._emitLocal("playerLeft", {
-            roomId,
-            leftPlayerId,
-            players: this.players,
-        });
+      this._emitLocal("playerLeft", {
+        roomId,
+        leftPlayerId,
+        players: this.players,
+      });
     });
-
 
     this.socket.on("roomState", (state) => {
       // state might contain puzzleState, world, objects, etc.
@@ -118,9 +123,29 @@ export class NetworkClient {
     });
 
     this.socket.on("roleAssigned", ({ roomId, role }) => {
-        this.isHost = role === "host";
-        console.log("Role assigned:", role, "for room", roomId);
-        this._emitLocal("roleAssigned", { roomId, role });
+      this.isHost = role === "host";
+      console.log("Role assigned:", role, "for room", roomId);
+      this._emitLocal("roleAssigned", { roomId, role });
+    });
+
+    this.socket.on("createError", ({ message }) => {
+      this._emitLocal("createError", { message });
+    });
+
+    this.socket.on("gameClosed", ({ roomId }) => {
+      this._emitLocal("gameClosed", { roomId });
+    });
+
+    this.socket.on("inviteError", ({ message }) => {
+      this._emitLocal("inviteError", { message });
+    });
+
+    this.socket.on("inviteSent", ({ roomId, invitedUserId, invitedUsername }) => {
+      this._emitLocal("inviteSent", { roomId, invitedUserId, invitedUsername });
+    });
+
+    this.socket.on("inviteReceived", (payload) => {
+      this._emitLocal("inviteReceived", payload);
     });
   }
 
@@ -163,15 +188,33 @@ export class NetworkClient {
     };
   }
 
+  setUser(user) {
+    this.userId = user?.id ?? null;
+    if (this.userId) {
+      this.socket.emit("identify", { userId: this.userId });
+    }
+  }
+
   // ───────────────────────────
   // Outgoing messages
   // ───────────────────────────
-  createGame() {
-    this.socket.emit("createGame");
+  createGame({ inviteUsername } = {}) {
+    this.socket.emit("createGame", {
+      userId: this.userId,
+      inviteUsername,
+    });
+  }
+
+  sendInvite({ roomId, inviteUsername }) {
+    this.socket.emit("sendInvite", {
+      roomId,
+      inviteUsername,
+      userId: this.userId,
+    });
   }
 
   joinGame(roomId) {
-    this.socket.emit("joinGame", { roomId });
+    this.socket.emit("joinGame", { roomId, userId: this.userId });
   }
 
   /**
@@ -222,6 +265,14 @@ export class NetworkClient {
     this.socket.emit("puzzleUpdate", {
       roomId: this.roomId,
       puzzleState: partialPuzzleState,
+    });
+  }
+
+  exitGame() {
+    if (!this.roomId) return;
+    this.socket.emit("exitGame", {
+      roomId: this.roomId,
+      userId: this.userId,
     });
   }
 
