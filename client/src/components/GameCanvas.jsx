@@ -35,6 +35,7 @@ export default function GameCanvas({
   useRoleSetup({ role, threeRef });
 
   useWorldStateSync({
+    roomId: network.getRoomId(),
     world,
     role,
     puzzleState,

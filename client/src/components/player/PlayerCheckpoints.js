@@ -23,7 +23,6 @@ export function handleCheckpointsAndRespawn(player, newPos) {
 
     network.sendPuzzleUpdate({
       levelReached: 2,
-      respawnToken: Date.now(),
     });
   }
 
@@ -33,7 +32,6 @@ export function handleCheckpointsAndRespawn(player, newPos) {
 
     network.sendPuzzleUpdate({
       levelReached: 3,
-      respawnToken: Date.now(),
     });
   }
 
