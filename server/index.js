@@ -91,8 +91,7 @@ function loadRoomFromDb(roomId) {
   }
 
   const world = state?.world || buildWorld();
-  const puzzleState =
-    state?.puzzleState || buildDefaultPuzzleState(1, 1);
+  const puzzleState = state?.puzzleState || buildDefaultPuzzleState(1, 1);
   const objects = state?.objects || { ...world.blocks };
   const playerPositions = state?.playerPositions || {
     host: null,
@@ -258,7 +257,6 @@ io.on("connection", (socket) => {
       status,
     };
 
-
     socket.join(roomId);
     socket.data.userId = hostUser.id;
 
@@ -400,7 +398,10 @@ io.on("connection", (socket) => {
         role = "host";
         room.players.host = socket.id;
         room.hostUserId = userId;
-      } else if (room.players.client === null && userId === game.client_user_id) {
+      } else if (
+        room.players.client === null &&
+        userId === game.client_user_id
+      ) {
         role = "client";
         room.players.client = socket.id;
         room.clientUserId = userId;
@@ -409,8 +410,6 @@ io.on("connection", (socket) => {
         return;
       }
     }
-
-
 
     socket.join(roomId);
     socket.data.userId = userId;
@@ -486,24 +485,16 @@ io.on("connection", (socket) => {
       // Shared room level is the LOWER (min) of both players
       room.puzzleState.level = Math.min(hostLevel, clientLevel);
       updateGameLastLevel(roomId, room.puzzleState.level);
-
     }
 
     if (typeof puzzleState.respawnToken !== "undefined") {
-      const hostLevel = room.puzzleState.hostLevel || 1;
-      const clientLevel = room.puzzleState.clientLevel || 1;
-      const lowestLevel = Math.min(hostLevel, clientLevel);
-
-      room.puzzleState.hostLevel = lowestLevel;
-      room.puzzleState.clientLevel = lowestLevel;
-      room.puzzleState.level = lowestLevel;
-      updateGameLastLevel(roomId, lowestLevel);
       room.puzzleState.respawnToken = puzzleState.respawnToken;
     }
 
     io.to(roomId).emit("puzzleStateChanged", room.puzzleState);
     updateGameState(roomId, buildStateSnapshot(room));
   });
+
   // EXIT GAME (host closes room)
   socket.on("exitGame", ({ roomId, userId }) => {
     const room = rooms[roomId] || loadRoomFromDb(roomId);

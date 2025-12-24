@@ -99,7 +99,7 @@ export function verifyUser(username, password) {
 
 export function updateGameLastLevel(roomId, levelReached) {
   db.prepare(
-    "UPDATE games SET last_level = MAX(last_level, ?), updated_at = ? WHERE room_id = ?"
+    "UPDATE games SET last_level = MAX(COALESCE(last_level, 1), ?), updated_at = ? WHERE room_id = ?"
   ).run(levelReached, nowIso(), roomId);
 }
 

@@ -1,5 +1,5 @@
 // hooks/useWorldStateSync.js
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 const LEVEL_SPAWNS = {
@@ -25,12 +25,23 @@ export function useWorldStateSync({
   playerPositions,
   threeRef,
 }) {
+  const lastRespawnTokenRef = useRef(null);
+
   useEffect(() => {
     const { scene, player, remotePlayer, blocks } = threeRef.current || {};
     if (!scene || !world || !player || !remotePlayer || !role || !puzzleState) {
       return;
     }
 
+    const token = puzzleState?.respawnToken;
+
+    // Only respawn when token changes (ignore first render)
+    if (!token) return;
+    if (lastRespawnTokenRef.current === token) return;
+    lastRespawnTokenRef.current = token;
+
+    // ✅ Use current puzzleState.level to decide where to respawn,
+    // but DO NOT trigger the effect when level changes.
     const level = puzzleState.level ?? 1;
     const spawns = LEVEL_SPAWNS[level] || LEVEL_SPAWNS[1];
 
@@ -51,40 +62,7 @@ export function useWorldStateSync({
     }
     player.onGround = false;
 
-    // If you later re-enable syncing blocks from `objects` / `world.blocks`,
-    // you can move that commented block logic here and use `scene` & `blocks`.
-
-    // Example placeholder for when you uncomment that logic:
-    //
-    // const blockStates =
-    //   (objects && Object.keys(objects).length > 0 && objects) ||
-    //   (world && world.blocks) ||
-    //   {};
-    //
-    // Object.keys(blocks).forEach((id) => {
-    //   if (!blockStates[id]) {
-    //     scene.remove(blocks[id]);
-    //     delete blocks[id];
-    //   }
-    // });
-    //
-    // Object.entries(blockStates).forEach(([id, data]) => {
-    //   const { x, y, z } = data;
-    //   let mesh = blocks[id];
-    //
-    //   if (!mesh) {
-    //     mesh = new THREE.Mesh(
-    //       new THREE.BoxGeometry(1, 1, 1),
-    //       new THREE.MeshStandardMaterial({ color: 0x8888ff })
-    //     );
-    //     mesh.castShadow = true;
-    //     scene.add(mesh);
-    //     blocks[id] = mesh;
-    //   }
-    //
-    //   mesh.position.set(x, y, z);
-    // });
-
+    // Reset blocks on respawn ONLY
     if (blocks) {
       Object.values(blocks).forEach((blockMesh) => {
         const init = blockMesh.userData?.initialPosition;
@@ -102,12 +80,5 @@ export function useWorldStateSync({
         }
       });
     }
-  }, [
-    world,
-    role,
-    puzzleState,
-    puzzleState?.level,
-    puzzleState?.respawnToken,
-    threeRef,
-  ]);
+  }, [world, role, threeRef, puzzleState?.respawnToken]);
 }
