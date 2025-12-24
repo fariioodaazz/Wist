@@ -91,7 +91,10 @@ function loadRoomFromDb(roomId) {
   }
 
   const world = state?.world || buildWorld();
-  const puzzleState = state?.puzzleState || buildDefaultPuzzleState(1, 1);
+  const fallbackLevel = Number(game.last_level) || 1;
+
+  const puzzleState =
+    state?.puzzleState || buildDefaultPuzzleState(fallbackLevel, fallbackLevel);
   const objects = state?.objects || { ...world.blocks };
   const playerPositions = state?.playerPositions || {
     host: null,
@@ -200,6 +203,12 @@ app.post("/api/accept-invite", (req, res) => {
   }
 
   res.json({ roomId: game.room_id });
+});
+
+app.get("/api/debug-game", (req, res) => {
+  const roomId = String(req.query.roomId || "");
+  const game = getGameByRoomId(roomId);
+  res.json({ game });
 });
 
 // Socket.IO connection

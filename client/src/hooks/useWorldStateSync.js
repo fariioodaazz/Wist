@@ -1,6 +1,5 @@
 // hooks/useWorldStateSync.js
 import { useEffect, useRef } from "react";
-import * as THREE from "three";
 
 const LEVEL_SPAWNS = {
   1: {
@@ -17,7 +16,21 @@ const LEVEL_SPAWNS = {
   },
 };
 
+function getSpawnsForLevel(level) {
+  const lvl = Number(level) || 1;
+  return LEVEL_SPAWNS[lvl] || LEVEL_SPAWNS[1];
+}
+
+function resetLocalPhysics(player) {
+  if (!player) return;
+  if (player.velocity && typeof player.velocity.set === "function") {
+    player.velocity.set(0, 0, 0);
+  }
+  player.onGround = false;
+}
+
 export function useWorldStateSync({
+  roomId,
   world,
   role,
   puzzleState,
@@ -26,24 +39,58 @@ export function useWorldStateSync({
   threeRef,
 }) {
   const lastRespawnTokenRef = useRef(null);
+  const didInitialPlacementRef = useRef(false);
 
+  // when changing rooms / rejoining, allow initial placement + respawn logic to run again
+  useEffect(() => {
+    lastRespawnTokenRef.current = null;
+    didInitialPlacementRef.current = false;
+  }, [roomId]);
+
+  // Run once when room state is available to place players correctly.
+  useEffect(() => {
+    const { scene, player, remotePlayer } = threeRef.current || {};
+    if (!scene || !world || !player || !remotePlayer || !role || !puzzleState)
+      return;
+    if (didInitialPlacementRef.current) return;
+
+    const level = puzzleState.level ?? 1;
+    const spawns = getSpawnsForLevel(level);
+
+    const hostSaved = playerPositions?.host;
+    const clientSaved = playerPositions?.client;
+
+    const hostFinal = hostSaved ?? spawns.host;
+    const clientFinal = clientSaved ?? spawns.client;
+
+    if (role === "host") {
+      player.mesh.position.set(hostFinal.x, hostFinal.y, hostFinal.z);
+      remotePlayer.position.set(clientFinal.x, clientFinal.y, clientFinal.z);
+    } else {
+      player.mesh.position.set(clientFinal.x, clientFinal.y, clientFinal.z);
+      remotePlayer.position.set(hostFinal.x, hostFinal.y, hostFinal.z);
+    }
+
+    resetLocalPhysics(player);
+
+    didInitialPlacementRef.current = true;
+  }, [world, role, puzzleState, playerPositions, threeRef]);
+
+  // Trigger when respawnToken changes.
   useEffect(() => {
     const { scene, player, remotePlayer, blocks } = threeRef.current || {};
-    if (!scene || !world || !player || !remotePlayer || !role || !puzzleState) {
+    if (!scene || !world || !player || !remotePlayer || !role || !puzzleState)
       return;
-    }
 
     const token = puzzleState?.respawnToken;
 
-    // Only respawn when token changes (ignore first render)
+    // Only respawn when token exists and changes
     if (!token) return;
     if (lastRespawnTokenRef.current === token) return;
     lastRespawnTokenRef.current = token;
 
-    // ✅ Use current puzzleState.level to decide where to respawn,
-    // but DO NOT trigger the effect when level changes.
     const level = puzzleState.level ?? 1;
-    const spawns = LEVEL_SPAWNS[level] || LEVEL_SPAWNS[1];
+    const spawns = getSpawnsForLevel(level);
 
     const hostSpawn = spawns.host;
     const clientSpawn = spawns.client;
@@ -56,27 +103,23 @@ export function useWorldStateSync({
       remotePlayer.position.set(hostSpawn.x, hostSpawn.y, hostSpawn.z);
     }
 
-    // Reset local physics so you don't keep falling after respawn
-    if (player.velocity) {
-      player.velocity.set(0, 0, 0);
-    }
-    player.onGround = false;
+    resetLocalPhysics(player);
 
-    // Reset blocks on respawn ONLY
+    // Reset blocks on respawn
     if (blocks) {
       Object.values(blocks).forEach((blockMesh) => {
         const init = blockMesh.userData?.initialPosition;
-        if (init) {
-          blockMesh.position.copy(init);
+        if (!init) return;
 
-          // If this client is the "authoritative" one, sync it to others
-          if (role === "host" && player.network && blockMesh.userData.id) {
-            player.network.sendObjectUpdate(blockMesh.userData.id, {
-              x: blockMesh.position.x,
-              y: blockMesh.position.y,
-              z: blockMesh.position.z,
-            });
-          }
+        blockMesh.position.copy(init);
+
+        // If host is authoritative, sync reset to others
+        if (role === "host" && player.network && blockMesh.userData?.id) {
+          player.network.sendObjectUpdate(blockMesh.userData.id, {
+            x: blockMesh.position.x,
+            y: blockMesh.position.y,
+            z: blockMesh.position.z,
+          });
         }
       });
     }
