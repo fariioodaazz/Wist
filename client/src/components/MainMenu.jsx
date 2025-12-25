@@ -35,7 +35,7 @@ export default function MainMenu({
             <>
               <div className="auth-title">Welcome, {user.username}</div>
               <div className="auth-actions">
-                <button className="menu-btn auth-btn" onClick={onPlay}>
+                <button className="menu-btn" onClick={onPlay}>
                   <span className="btn-text">CONTINUE</span>
                 </button>
                 <button className="menu-btn auth-secondary" onClick={onLogout}>

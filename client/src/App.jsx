@@ -5,23 +5,29 @@ import { NetworkClient } from "./network/NetworkClient.js";
 import GameDialog from "./components/GameDialog.jsx";
 import GameStatusBar from "./components/GameStatusBar.jsx";
 import MainMenu from "./components/MainMenu.jsx";
-import "./components/Lobby.css";
+
+import menuImage from "./assets/menu.jpeg";
+import dadImage from "./assets/dad_removed.png";
+import houseImage from "./assets/house_removed.png";
 
 function App() {
   const [screen, setScreen] = useState("mainMenu"); // "mainMenu" | "lobby" | "waiting" | "game"
   const [prevScreen, setPrevScreen] = useState("mainMenu");
   const [connected, setConnected] = useState(false);
+
   const [roomIdInput, setRoomIdInput] = useState("");
   const [roomId, setRoomId] = useState("");
   const [role, setRole] = useState(null); // "host" or "client"
+
   const [world, setWorld] = useState(null);
   const [puzzleState, setPuzzleState] = useState(null);
   const [objects, setObjects] = useState(null);
   const [playerPositions, setPlayerPositions] = useState(null);
   const [players, setPlayers] = useState({ host: null, client: null });
   const playerCount = (players?.host ? 1 : 0) + (players?.client ? 1 : 0);
+
   const [isPaused, setIsPaused] = useState(false);
-  const [hasExitedGame, setHasExitedGame] = useState(false); // Track if user exited from an active game
+  const [hasExitedGame, setHasExitedGame] = useState(false);
 
   const [dialog, setDialog] = useState({
     open: false,
@@ -34,14 +40,27 @@ function App() {
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({ username: "", password: "" });
   const [authError, setAuthError] = useState("");
+
   const [invites, setInvites] = useState([]);
   const [activeGames, setActiveGames] = useState([]);
   const [inviteTarget, setInviteTarget] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
 
+  // Lobby sub-modes:
+  // home => 4 bottom buttons only
+  // continue => list saved games + rejoin
+  // join => input room code + join
+  const [lobbyMode, setLobbyMode] = useState("home");
+
+  // Invite popup modal
+  const [invitePopup, setInvitePopup] = useState({
+    open: false,
+    roomId: "",
+    hostUserId: null,
+    hostUsername: "",
+  });
+
   const screenRef = useRef(screen);
-
-
   const network = useMemo(() => new NetworkClient(), []);
 
   const refreshGames = async () => {
@@ -92,9 +111,9 @@ function App() {
     setAuthError("");
     setRoomId("");
     setRoomIdInput("");
+    setLobbyMode("home");
     setScreen("mainMenu");
   };
-
 
   useEffect(() => {
     screenRef.current = screen;
@@ -108,7 +127,7 @@ function App() {
       setConnected(true);
       setPlayers({ host: network.playerId, client: null });
       setScreen("waiting");
-      setHasExitedGame(false); // Reset flag when creating new game
+      setHasExitedGame(false);
       setInviteStatus("");
       setInviteTarget("");
     });
@@ -118,7 +137,6 @@ function App() {
       setPlayers(players);
       console.log("Joined room", roomId, "players:", players);
 
-      // When second player joins, transition both to game
       const count = (players?.host ? 1 : 0) + (players?.client ? 1 : 0);
       if (count === 2) {
         setPrevScreen(screenRef.current);
@@ -148,35 +166,23 @@ function App() {
       setPuzzleState(puzzleState);
     });
 
-    // when someone leaves but room stays alive
     network.on("playerLeft", ({ leftPlayerId, players }) => {
       setPlayers(players || { host: null, client: null });
       console.log("Player left:", leftPlayerId, "remaining:", players);
     });
 
-    // join errors
     network.on("joinError", ({ message }) => {
-      setDialog({
-        open: true,
-        title: "Join Error",
-        message,
-      });
+      setDialog({ open: true, title: "Join Error", message });
     });
 
-    // role assigned for client joining
     network.on("roleAssigned", ({ role }) => {
       setRole(role);
       setConnected(true);
-      setHasExitedGame(false); // Reset flag when successfully joining
-      // Client will transition to game when playerJoined event fires
+      setHasExitedGame(false);
     });
 
     network.on("createError", ({ message }) => {
-      setDialog({
-        open: true,
-        title: "Create Error",
-        message,
-      });
+      setDialog({ open: true, title: "Create Error", message });
     });
 
     network.on("gameClosed", ({ roomId }) => {
@@ -189,11 +195,7 @@ function App() {
     });
 
     network.on("inviteError", ({ message }) => {
-      setDialog({
-        open: true,
-        title: "Invite Error",
-        message,
-      });
+      setDialog({ open: true, title: "Invite Error", message });
     });
 
     network.on("inviteSent", ({ invitedUsername }) => {
@@ -202,6 +204,7 @@ function App() {
       refreshInvites();
     });
 
+    // INVITE POPUP
     network.on("inviteReceived", ({ roomId, hostUserId, hostUsername }) => {
       setInvites((prev) => {
         if (prev.some((invite) => invite.room_id === roomId)) return prev;
@@ -213,6 +216,13 @@ function App() {
         };
         return [nextInvite, ...prev];
       });
+
+      setInvitePopup({
+        open: true,
+        roomId,
+        hostUserId,
+        hostUsername,
+      });
     });
   }, [network]);
 
@@ -222,7 +232,6 @@ function App() {
     refreshGames();
     refreshInvites();
   }, [user, network]);
-
 
   // Menu navigation handlers
   const handlePlayFromMainMenu = () => {
@@ -236,16 +245,15 @@ function App() {
     }
     refreshGames();
     refreshInvites();
+    setLobbyMode("home");
     setScreen("lobby");
   };
 
   const handleBackToMainMenu = () => {
-    // Disconnect if connected
     if (connected) {
       network.disconnect();
     }
 
-    // Reset all state
     setScreen("mainMenu");
     setConnected(false);
     setRole(null);
@@ -258,6 +266,10 @@ function App() {
     setPlayerPositions(null);
     setPlayers({ host: null, client: null });
     setHasExitedGame(false);
+
+    setLobbyMode("home");
+    setInviteTarget("");
+    setInviteStatus("");
   };
 
   const handleCreate = () => {
@@ -344,36 +356,84 @@ function App() {
     });
   };
 
+  // LOBBY button behavior
+  const handleContinueGame = async () => {
+    if (!user) {
+      setDialog({
+        open: true,
+        title: "Login required",
+        message: "Please login to continue a game.",
+      });
+      return;
+    }
+    await refreshGames();
+    setLobbyMode("continue");
+  };
+
+  // ✅ NEW GAME: immediately create + show WAITING screen (not a "Create Room" section)
+  const handleLobbyNewGame = () => {
+    if (!user) {
+      setDialog({
+        open: true,
+        title: "Login required",
+        message: "Please login to create a game.",
+      });
+      return;
+    }
+    // clear invite UI
+    setInviteTarget("");
+    setInviteStatus("");
+    // create the game -> network.on("gameCreated") will move to screen="waiting"
+    handleCreate();
+  };
+
+  const handleLobbyJoinGame = () => {
+    if (!user) {
+      setDialog({
+        open: true,
+        title: "Login required",
+        message: "Please login to join a game.",
+      });
+      return;
+    }
+    setLobbyMode("join");
+  };
+
+  const handleLobbyBack = () => {
+    if (screen === "lobby" && lobbyMode !== "home") {
+      setLobbyMode("home");
+      return;
+    }
+    handleBackToMainMenu();
+  };
 
   const handleExitGame = () => {
-    // Store the current room ID before disconnecting (so user can rejoin)
     const currentRoomId = roomId;
     const isHostExit = role === "host";
 
     if (isHostExit) {
       network.exitGame();
-      // Disconnect from the network
       network.disconnect();
 
-      // Reset game state but keep room info for rejoining
       setScreen("lobby");
       setConnected(false);
       setRole(null);
-      // Keep roomId in input so user can easily rejoin
+
       setRoomIdInput("");
       setRoomId("");
+
       setIsPaused(false);
       setWorld(null);
       setPuzzleState(null);
       setObjects(null);
       setPlayerPositions(null);
       setPlayers({ host: null, client: null });
-      // Mark that user exited from an active game
       setHasExitedGame(false);
+
+      setLobbyMode("home");
       return;
     }
 
-    // Client exit just goes back without closing the room
     setScreen(prevScreen);
     setIsPaused(false);
     setRoomIdInput(currentRoomId);
@@ -390,6 +450,50 @@ function App() {
   };
 
   const getGameLevel = (game) => game?.last_level ?? null;
+
+  const lobbyBgImages = [menuImage, dadImage, houseImage];
+
+  const [bgA, setBgA] = useState(0);
+  const [bgB, setBgB] = useState(1);
+  const [showB, setShowB] = useState(false);
+
+  useEffect(() => {
+    if (screen !== "lobby") return;
+
+    const fadeMs = 1200;
+    const holdMs = 1500;
+
+    let i = 0; // A is i, B is i+1
+    let t1, t2;
+
+    const step = () => {
+      if (i >= lobbyBgImages.length - 1) {
+        // we're at the last image -> stay
+        setShowB(false);
+        setBgA(lobbyBgImages.length - 1);
+        return;
+      }
+
+      setBgA(i);
+      setBgB(i + 1);
+      setShowB(true);
+
+      // after fade, lock A to the new image and prepare next step
+      t1 = setTimeout(() => {
+        i = i + 1;
+        setShowB(false);
+
+        t2 = setTimeout(step, holdMs);
+      }, fadeMs);
+    };
+
+    step();
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [screen]);
 
   return (
     <>
@@ -410,203 +514,409 @@ function App() {
         />
       )}
 
-      {/* Lobby - Create or Join */}
+      {/* Lobby (background only here) */}
+      {/* Lobby (background only here) */}
       {screen === "lobby" && (
-        <div className="lobby-container">
-          {/* Decorative clouds */}
-          <div className="lobby-clouds">
-            <div className="lobby-cloud lobby-cloud-1"></div>
-            <div className="lobby-cloud lobby-cloud-2"></div>
-            <div className="lobby-cloud lobby-cloud-3"></div>
-          </div>
+        <div
+          style={{
+            minHeight: "100vh",
+            width: "100vw",
+            backgroundColor: "#D9D9D9",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          {/* Layer A */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: `url(${lobbyBgImages[bgA]})`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "center",
+              backgroundSize: "contain",
+              zIndex: 0,
+            }}
+          />
 
-          {/* Floating decorative elements */}
-          <div style={{
-            position: 'absolute',
-            width: '100%',
-            height: '100%',
-            pointerEvents: 'none',
-            zIndex: 5
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '15%',
-              left: '10%',
-              fontSize: '48px',
-              animation: 'float 4s ease-in-out infinite',
-              animationDelay: '0s'
-            }}>🎲</div>
-            <div style={{
-              position: 'absolute',
-              top: '70%',
-              right: '15%',
-              fontSize: '42px',
-              animation: 'float 3.5s ease-in-out infinite',
-              animationDelay: '1s'
-            }}>🎯</div>
-            <div style={{
-              position: 'absolute',
-              bottom: '20%',
-              left: '12%',
-              fontSize: '38px',
-              animation: 'float 4.5s ease-in-out infinite',
-              animationDelay: '0.5s'
-            }}>🏆</div>
-            <div style={{
-              position: 'absolute',
-              top: '25%',
-              right: '12%',
-              fontSize: '45px',
-              animation: 'float 3.8s ease-in-out infinite',
-              animationDelay: '2s'
-            }}>⚡</div>
-          </div>
+          {/* Layer B fades in over A */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: `url(${lobbyBgImages[bgB]})`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "center",
+              backgroundSize: "contain",
+              opacity: showB ? 1 : 0,
+              transition: "opacity 1200ms ease",
+              zIndex: 1,
+            }}
+          />
 
-          <div className="lobby-box">
-            <h1 className="lobby-title">Choose Players</h1>
+          {/* Foreground UI (header + buttons) */}
+          <div style={{ position: "relative", zIndex: 100 }}>
+            {/* Username header */}
+            <h1
+              style={{
+                position: "fixed",
+                top: 16,
+                left: 0,
+                right: 0,
+                textAlign: "center",
+                color: "black",
+                margin: 0,
+                zIndex: 300,
+                pointerEvents: "none",
+              }}
+            >
+              Welcome back, {user?.username}!
+            </h1>
 
+            {/* ✅ Center overlay panels (Continue / Join) - FIXED + CENTERED */}
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+                boxSizing: "border-box",
+                zIndex: 200, // above images, below popup
+                pointerEvents: lobbyMode === "home" ? "none" : "auto",
+              }}
+            >
+              {/* CONTINUE VIEW */}
+              {lobbyMode === "continue" && (
+                <div
+                  style={{
+                    width: "min(900px, 92vw)",
+                    maxHeight: "70vh",
+                    overflow: "auto",
+                    background: "rgba(0,0,0,0.45)",
+                    padding: 16,
+                    borderRadius: 12,
+                    color: "white",
+                    boxSizing: "border-box",
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <h2 style={{ marginTop: 0 }}>Saved Games</h2>
 
-            {user && (
-              <div className="lobby-profile">
-                <div className="lobby-profile-title">Profile</div>
-                <div className="lobby-profile-row">User: {user.username}</div>
-              </div>
-            )}
+                  {activeGames.length === 0 ? (
+                    <div>No saved games found.</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {activeGames.map((game) => (
+                        <div
+                          key={game.room_id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            padding: 12,
+                            borderRadius: 10,
+                            background: "rgba(255,255,255,0.12)",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700 }}>
+                              Room {game.room_id}{" "}
+                              {getGameLevel(game)
+                                ? `(Level ${getGameLevel(game)})`
+                                : ""}
+                            </div>
+                            <div style={{ opacity: 0.9 }}>
+                              Opponent: {game.opponent_username || "Waiting"}
+                            </div>
+                          </div>
 
-            {invites.length > 0 && (
-              <div className="lobby-section">
-                <div className="lobby-section-title">Invites</div>
-                <div className="lobby-list">
-                  {invites.map((invite) => (
-                    <div className="lobby-list-row" key={invite.room_id}>
-                      <div className="lobby-chip">
-                        Room {invite.room_id} • Host{" "}
-                        {invite.host_username || invite.host_user_id}
-                      </div>
-                      <button
-                        className="lobby-small-button"
-                        onClick={() => handleAcceptInvite(invite.room_id)}
-                      >
-                        Accept
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejoinGame(game.room_id)}
+                            style={{ pointerEvents: "auto" }}
+                          >
+                            Rejoin
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                </div>
+              )}
+
+              {/* JOIN GAME VIEW */}
+              {lobbyMode === "join" && (
+                <div
+                  style={{
+                    width: "min(700px, 92vw)",
+                    background: "rgba(0,0,0,0.45)",
+                    padding: 16,
+                    borderRadius: 12,
+                    color: "white",
+                    display: "grid",
+                    gap: 12,
+                    boxSizing: "border-box",
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <h2 style={{ marginTop: 0 }}>Join Game</h2>
+
+                  <input
+                    type="text"
+                    placeholder="Enter Room Code"
+                    value={roomIdInput}
+                    onChange={(e) => setRoomIdInput(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: "none",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+
+                  <button type="button" onClick={handleJoin}>
+                    Join
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom buttons */}
+            <div
+              style={{
+                position: "fixed",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                padding: 12,
+                display: "grid",
+                gap: 12,
+                zIndex: 9999,
+                boxSizing: "border-box",
+              }}
+            >
+              {lobbyMode === "home" ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: 12,
+                  }}
+                >
+                  <button type="button" onClick={handleContinueGame}>
+                    Continue Game
+                  </button>
+
+                  <button type="button" onClick={handleLobbyNewGame}>
+                    New Game
+                  </button>
+
+                  <button type="button" onClick={handleLobbyJoinGame}>
+                    Join Game
+                  </button>
+
+                  <button type="button" onClick={handleLobbyBack}>
+                    Back
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: 12,
+                  }}
+                >
+                  <button type="button" onClick={handleLobbyBack}>
+                    Back
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ✅ Invite Popup (full-screen fixed + centered) */}
+          {invitePopup.open && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                width: "100vw",
+                height: "100vh",
+                backgroundColor: "rgba(0,0,0,0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+                zIndex: 999999,
+              }}
+              onClick={() => setInvitePopup((p) => ({ ...p, open: false }))}
+            >
+              <div
+                style={{
+                  width: "min(520px, 92vw)",
+                  backgroundColor: "white",
+                  padding: 16,
+                  borderRadius: 12,
+                  display: "grid",
+                  gap: 12,
+                  boxSizing: "border-box",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 style={{ margin: 0 }}>Game Invite</h3>
+
+                <div style={{ color: "black" }}>
+                  <b>{invitePopup.hostUsername || invitePopup.hostUserId}</b>{" "}
+                  invited you to room <b>{invitePopup.roomId}</b>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInvitePopup((p) => ({ ...p, open: false }))
+                    }
+                  >
+                    Decline
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rid = invitePopup.roomId;
+                      setInvitePopup((p) => ({ ...p, open: false }));
+                      handleAcceptInvite(rid);
+                    }}
+                  >
+                    Accept
+                  </button>
                 </div>
               </div>
-            )}
-
-            {activeGames.length > 0 && (
-              <div className="lobby-section">
-                <div className="lobby-section-title">Active Games</div>
-                <div className="lobby-list">
-                  {activeGames.map((game) => (
-                    <div className="lobby-list-row" key={game.room_id}>
-                      <div className="lobby-chip">
-                        Room {game.room_id} •{" "}
-                        {game.opponent_username || "Waiting"}{" "}
-                        {getGameLevel(game) ? `(Level ${getGameLevel(game)})` : ""}
-                      </div>
-                      <button
-                        className="lobby-small-button"
-                        onClick={() => handleRejoinGame(game.room_id)}
-                      >
-                        Rejoin
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-
-            {hasExitedGame && roomIdInput && (
-              <div style={{
-                background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-                padding: '1rem',
-                borderRadius: '12px',
-                marginBottom: '1.5rem',
-                border: '4px solid #FF8C42',
-                boxShadow: '0 4px 0 #CC7000, 0 6px 15px rgba(0,0,0,0.3)'
-              }}>
-                <p style={{
-                  margin: 0,
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '18px',
-                  textShadow: '2px 2px 0 rgba(0,0,0,0.3)'
-                }}>
-                  💾 Ready to rejoin: {roomIdInput}
-                </p>
-              </div>
-            )}
-
-            <button onClick={handleCreate} className="lobby-button create-button">
-              🎮 Create New Game 🎮
-            </button>
-
-            <div className="lobby-divider">OR</div>
-
-            <input
-              type="text"
-              placeholder="Room Code"
-              value={roomIdInput}
-              onChange={(e) => setRoomIdInput(e.target.value)}
-              className="lobby-input"
-            />
-
-            <button onClick={handleJoin} className="lobby-button join-button">
-              {hasExitedGame && roomIdInput ? '🔄 Rejoin Game 🔄' : '🚀 Join Game 🚀'}
-            </button>
-
-            <button onClick={handleBackToMainMenu} className="lobby-button back-button">
-              ← Back
-            </button>
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Waiting Screen - Host waits for player 2 */}
+      {/* Waiting Screen - styled like the rest*/}
       {screen === "waiting" && (
-        <div className="waiting-container">
-          {/* Decorative clouds */}
-          <div className="lobby-clouds">
-            <div className="lobby-cloud lobby-cloud-1"></div>
-            <div className="lobby-cloud lobby-cloud-2"></div>
-            <div className="lobby-cloud lobby-cloud-3"></div>
-          </div>
+        <div
+          style={{
+            minHeight: "100vh",
+            width: "100vw",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            boxSizing: "border-box",
+            overflow: "hidden",
+          }}
+        >
+          {/* Center panel */}
+          <div
+            style={{
+              width: "min(700px, 92vw)",
+              maxHeight: "calc(100vh - 96px)",
+              overflow: "auto",
+              background: "rgba(0,0,0,0.45)",
+              padding: 16,
+              borderRadius: 12,
+              color: "white",
+              display: "grid",
+              gap: 12,
+              boxSizing: "border-box",
+            }}
+          >
+            <h2 style={{ margin: 0 }}>Waiting for Player 2...</h2>
 
-          <div className="waiting-box">
-            <h2 className="waiting-title">Waiting for Player 2...</h2>
-
-            <div className="room-code-display">
-              <p className="room-code-label">Share this code with your friend:</p>
-              <p className="room-code-text">{roomId}</p>
+            <div style={{ display: "grid", gap: 8 }}>
+              <p style={{ margin: 0, opacity: 0.95 }}>
+                Share this code with your friend:
+              </p>
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.12)",
+                  fontSize: 20,
+                  letterSpacing: 2,
+                  textAlign: "center",
+                  wordBreak: "break-word",
+                }}
+              >
+                {roomId}
+              </div>
             </div>
 
-            <div className="waiting-invite">
+            <div style={{ display: "grid", gap: 8 }}>
               <input
                 type="text"
                 placeholder="Invite username"
                 value={inviteTarget}
                 onChange={(e) => setInviteTarget(e.target.value)}
-                className="lobby-input waiting-invite-input"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "none",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
               />
-              <button
-                className="lobby-button join-button"
-                onClick={handleSendInvite}
-              >
+
+              <button type="button" onClick={handleSendInvite}>
                 Send Invite
               </button>
+
               {inviteStatus && (
-                <div className="waiting-invite-status">{inviteStatus}</div>
+                <div style={{ opacity: 0.9 }}>{inviteStatus}</div>
               )}
             </div>
-
-            </div>
-
-            <div className="waiting-icon">⏳</div>
-            <p className="waiting-message">Game will start when both players are ready</p>
           </div>
+
+          {/* Bottom Back button */}
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              padding: 12,
+              boxSizing: "border-box",
+              zIndex: 9999,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                // go back to lobby home buttons
+                setScreen("lobby");
+                setLobbyMode("home");
+              }}
+              style={{
+                width: "min(700px, 92vw)",
+                margin: "0 auto",
+                display: "block",
+              }}
+            >
+              Back
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Game Dialog */}
@@ -618,7 +928,7 @@ function App() {
 
       {/* Game Canvas */}
       {screen === "game" && connected && (
-        <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+        <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
           <GameCanvas
             network={network}
             role={role}
@@ -629,145 +939,128 @@ function App() {
           />
 
           {/* Game Controls Overlay */}
-          <div style={{
-            position: 'absolute',
-            top: '20px',
-            left: '0',
-            right: '0',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '1rem',
-            zIndex: 1000,
-            pointerEvents: 'none'
-          }}>
-            {/* Pause/Play Button */}
+          <div
+            style={{
+              position: "absolute",
+              top: "20px",
+              left: "0",
+              right: "0",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "1rem",
+              zIndex: 1000,
+              pointerEvents: "none",
+            }}
+          >
             <button
               onClick={togglePause}
               style={{
-                padding: '12px 20px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                backgroundColor: isPaused ? '#4A9A4A' : '#FFD700',
-                color: 'white',
-                border: '4px solid',
-                borderColor: isPaused ? '#2D5A2D' : '#FF8C42',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)',
-                transition: 'all 0.2s ease',
-                pointerEvents: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 6px 0 rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)';
+                padding: "12px 20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                backgroundColor: isPaused ? "#4A9A4A" : "#FFD700",
+                color: "white",
+                border: "4px solid",
+                borderColor: isPaused ? "#2D5A2D" : "#FF8C42",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow:
+                  "0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)",
+                transition: "all 0.2s ease",
+                pointerEvents: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
               }}
             >
-              <span style={{ fontSize: '24px' }}>{isPaused ? '▶️' : '⏸️'}</span>
-              <span>{isPaused ? 'RESUME' : 'PAUSE'}</span>
+              <span style={{ fontSize: "24px" }}>{isPaused ? "▶️" : "⏸️"}</span>
+              <span>{isPaused ? "RESUME" : "PAUSE"}</span>
             </button>
 
-            {/* Back Button */}
             <button
               onClick={handleBackFromGame}
               style={{
-                padding: '12px 20px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                backgroundColor: '#3498DB',
-                color: 'white',
-                border: '4px solid #1F6FA3',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)',
-                transition: 'all 0.2s ease',
-                pointerEvents: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 6px 0 rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)';
+                padding: "12px 20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                backgroundColor: "#3498DB",
+                color: "white",
+                border: "4px solid #1F6FA3",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow:
+                  "0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)",
+                transition: "all 0.2s ease",
+                pointerEvents: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
               }}
             >
               <span>BACK</span>
             </button>
 
-            {/* Exit/Back Button */}
             <button
               onClick={handleExitGame}
               style={{
-                padding: '12px 20px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                backgroundColor: '#E74C3C',
-                color: 'white',
-                border: '4px solid #C0392B',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)',
-                transition: 'all 0.2s ease',
-                pointerEvents: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 6px 0 rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)';
+                padding: "12px 20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                backgroundColor: "#E74C3C",
+                color: "white",
+                border: "4px solid #C0392B",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow:
+                  "0 4px 0 rgba(0,0,0,0.3), 0 6px 15px rgba(0,0,0,0.4)",
+                transition: "all 0.2s ease",
+                pointerEvents: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
               }}
             >
-              <span style={{ fontSize: '24px' }}>🚪</span>
+              <span style={{ fontSize: "24px" }}>🚪</span>
               <span>EXIT</span>
             </button>
           </div>
 
-          {/* Pause Overlay */}
           {isPaused && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              zIndex: 999,
-              backdropFilter: 'blur(5px)'
-            }}>
-              <h1 style={{
-                fontSize: '72px',
-                fontWeight: 900,
-                color: 'white',
-                textShadow: '4px 4px 0 rgba(0,0,0,0.5)',
-                marginBottom: '2rem'
-              }}>
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.7)",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "center",
+                zIndex: 999,
+                backdropFilter: "blur(5px)",
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: "72px",
+                  fontWeight: 900,
+                  color: "white",
+                  textShadow: "4px 4px 0 rgba(0,0,0,0.5)",
+                  marginBottom: "2rem",
+                }}
+              >
                 ⏸️ PAUSED
               </h1>
-              <p style={{
-                fontSize: '24px',
-                color: 'white',
-                textShadow: '2px 2px 0 rgba(0,0,0,0.5)'
-              }}>
+              <p
+                style={{
+                  fontSize: "24px",
+                  color: "white",
+                  textShadow: "2px 2px 0 rgba(0,0,0,0.5)",
+                }}
+              >
                 Click RESUME to continue playing
               </p>
             </div>
