@@ -25,6 +25,16 @@ export function loadLevel1(role) {
   const p2 = new THREE.Mesh(geometry, platformMaterial);
   p2.position.z = -38;
   p2.receiveShadow = true;
+  // p2.userData.id = "p2";
+  // p2.userData.isBreakable = true;
+  // p2.userData.onlyMomBreaks = true;
+  // p2.userData.initialState = {
+  //   position: p2.position.clone(),
+  //   rotation: p2.rotation.clone(),
+  //   scale: p2.scale.clone(),
+  //   visible: true,
+  //   broken: false,
+  // };
   group.add(p2);
   platforms.push(p2);
 

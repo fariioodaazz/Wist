@@ -1,5 +1,7 @@
-// player/Player.js
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164/build/three.module.js";
+// components/player/Player.js
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
 import { PlayerInput } from "./PlayerInput.js";
 import { PLAYER_COLLISION } from "./PlayerConfig.js";
 import { handleCheckpointsAndRespawn } from "./PlayerCheckpoints.js";
@@ -9,50 +11,71 @@ export default class Player {
     this.platforms = platforms;
 
     const {
-      mesh = null,
+      modelUrl = null,
+
+      // Collider / physics defaults
       geometry = new THREE.BoxGeometry(2, 2, 2),
       material = new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
       position = new THREE.Vector3(0, 3, 0),
+
       speed = 20,
       jumpSpeed = 18,
       gravity = -40,
+
       network = null,
       otherPlayer = null,
       role = "client",
+      modelScale = 1,
     } = options;
 
     this.network = network;
     this.otherPlayer = otherPlayer;
     this.role = role;
+    this.modelScale = modelScale;
 
-    if (mesh instanceof THREE.Mesh) {
-      this.mesh = mesh;
-      this.mesh.position.copy(position);
-    } else {
-      this.mesh = new THREE.Mesh(geometry, material);
-      this.mesh.position.copy(position);
-    }
-
-    this.mesh.castShadow = true;
-    this.mesh.receiveShadow = true;
-
+    // Root group that represents the player (position + rotation live here)
+    this.mesh = new THREE.Group();
+    this.mesh.position.copy(position);
     scene.add(this.mesh);
 
-    // ====== PHYSICS CONFIG ======
+    // Invisible collider
+    this.collider = new THREE.Mesh(geometry, material);
+    this.collider.visible = false;
+    this.mesh.add(this.collider);
+
+    // Anim state
+    this.model = null;
+    this.mixer = null;
+    this.actions = {};
+    this.activeAction = null;
+    this.fadeDuration = 0.15;
+
+    this.clipNames = {
+      rest: "Rest Pose",
+      idle: "Idle",
+      walk: "Walking",
+      sit: "Sitting",
+    };
+
+    if (modelUrl) this.loadModel(modelUrl);
+
+    // Physics
     this.velocity = new THREE.Vector3();
     this.speed = speed;
     this.jumpSpeed = jumpSpeed;
     this.gravity = gravity;
     this.onGround = false;
+    this.lastGroundObject = null;
+    this.breakCooldown = new Set();
 
     // Checkpoint flags
     this._reachedLevel2 = false;
     this._reachedLevel3 = false;
 
-    // ====== INPUT ======
+    // Input
     this.input = new PlayerInput();
 
-    // ====== COLLISION SETTINGS ======
+    // Collision settings
     this.playerHalfHeight = PLAYER_COLLISION.HALF_HEIGHT;
     this.playerHalfSize = PLAYER_COLLISION.HALF_SIZE.clone();
     this.skin = PLAYER_COLLISION.SKIN;
@@ -60,6 +83,78 @@ export default class Player {
     this.groundEpsilon = PLAYER_COLLISION.GROUND_EPSILON;
 
     this.raycaster = new THREE.Raycaster();
+  }
+
+  loadModel(url) {
+    const loader = new GLTFLoader();
+
+    loader.load(
+      url,
+      (gltf) => {
+        this.model = gltf.scene;
+
+        const s =
+          typeof this.modelScale === "number"
+            ? new THREE.Vector3(
+                this.modelScale,
+                this.modelScale,
+                this.modelScale
+              )
+            : this.modelScale;
+
+        this.model.scale.copy(s);
+
+        this.model.traverse((obj) => {
+          if (obj.isMesh) {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+          }
+        });
+
+        this.mesh.add(this.model);
+
+        // Animation setup
+        this.mixer = new THREE.AnimationMixer(this.model);
+        this.actions = {};
+        gltf.animations.forEach((clip) => {
+          this.actions[clip.name] = this.mixer.clipAction(clip);
+        });
+
+        console.log(`[${this.role}] clips:`, Object.keys(this.actions));
+
+        // Start idle/rest
+        if (this.actions[this.clipNames.idle])
+          this.fadeToAction(this.clipNames.idle, 0);
+        else if (this.actions[this.clipNames.rest])
+          this.fadeToAction(this.clipNames.rest, 0);
+        else if (gltf.animations[0])
+          this.fadeToAction(gltf.animations[0].name, 0);
+      },
+      undefined,
+      (err) => console.error("GLTF load error:", err)
+    );
+  }
+
+  fadeToAction(name, duration = this.fadeDuration) {
+    const next = this.actions?.[name];
+    if (!next) return;
+    if (next === this.activeAction) return;
+
+    next.reset().play();
+
+    if (this.activeAction) {
+      this.activeAction.fadeOut(duration);
+      next.fadeIn(duration);
+    } else {
+      next.play();
+    }
+
+    this.activeAction = next;
+  }
+
+  // For remote avatars: update animations ONLY
+  updateMixerOnly(delta) {
+    if (this.mixer) this.mixer.update(delta);
   }
 
   castRay(origin, direction, maxDistance) {
@@ -70,16 +165,57 @@ export default class Player {
     return hit.distance <= maxDistance ? hit : null;
   }
 
+  breakObject(obj) {
+    if (!obj || !obj.userData?.id) return;
+
+    // Hide + disable collisions by moving far away (simple & safe)
+    obj.visible = false;
+    obj.userData.broken = true;
+    obj.position.set(99999, 99999, 99999);
+
+    // Sync to client
+    if (this.network) {
+      this.network.sendObjectUpdate(obj.userData.id, {
+        broken: true,
+        x: obj.position.x,
+        y: obj.position.y,
+        z: obj.position.z,
+        visible: false,
+      });
+    }
+  }
+
   update(delta) {
-    // ─────────── INPUT ───────────
+    // Update animations
+    if (this.mixer) this.mixer.update(delta);
+
+    // INPUT
     const { moveX, moveZ, jumpPressed } = this.input.getInputState();
-
     const inputDir = new THREE.Vector3(moveX, 0, moveZ);
+    const isMoving = inputDir.lengthSq() > 0.0001;
 
-    if (inputDir.lengthSq() > 0) {
+    // Switch anim
+    if (isMoving) {
+      if (this.actions[this.clipNames.walk])
+        this.fadeToAction(this.clipNames.walk, 0.15);
+      else if (this.actions[this.clipNames.idle])
+        this.fadeToAction(this.clipNames.idle, 0.15);
+    } else {
+      if (this.actions[this.clipNames.idle])
+        this.fadeToAction(this.clipNames.idle, 0.2);
+      else if (this.actions[this.clipNames.rest])
+        this.fadeToAction(this.clipNames.rest, 0.2);
+    }
+
+    // Movement velocity
+    if (isMoving) {
       inputDir.normalize().multiplyScalar(this.speed);
       this.velocity.x = inputDir.x;
       this.velocity.z = inputDir.z;
+
+      // Face movement direction
+      const angle = Math.atan2(this.velocity.x, this.velocity.z);
+      this.mesh.rotation.y = angle;
     } else {
       this.velocity.x = 0;
       this.velocity.z = 0;
@@ -97,7 +233,7 @@ export default class Player {
     let deltaPos = this.velocity.clone().multiplyScalar(delta);
     let newPos = this.mesh.position.clone();
 
-    // ─────────── X movement (with pushable blocks) ───────────
+    // X movement (+ pushables)
     if (deltaPos.x !== 0) {
       const dirX = new THREE.Vector3(Math.sign(deltaPos.x), 0, 0);
       const originX = new THREE.Vector3(
@@ -138,7 +274,7 @@ export default class Player {
     }
     newPos.x += deltaPos.x;
 
-    // ─────────── Z movement (with pushable blocks) ───────────
+    // Z movement (+ pushables)
     if (deltaPos.z !== 0) {
       const dirZ = new THREE.Vector3(0, 0, Math.sign(deltaPos.z));
       const originZ = new THREE.Vector3(
@@ -179,7 +315,7 @@ export default class Player {
     }
     newPos.z += deltaPos.z;
 
-    // ─────────── Vertical movement & ground/ceiling ───────────
+    // Vertical movement & ground/ceiling
     this.onGround = false;
     let deltaY = deltaPos.y;
 
@@ -225,9 +361,30 @@ export default class Player {
       newPos.y = groundY + this.playerHalfHeight;
       this.velocity.y = 0;
       this.onGround = true;
+
+      const groundObj = hitDown.object;
+      this.lastGroundObject = groundObj;
+
+      const isBreakable = !!groundObj?.userData?.isBreakable;
+      const onlyMom = !!groundObj?.userData?.onlyMomBreaks;
+
+      const isMom = this.role === "host";
+
+      const canBreak = isBreakable && (!onlyMom || isMom);
+      if (canBreak) {
+        const id = groundObj.userData?.id;
+        if (id && !this.breakCooldown.has(id)) {
+          this.breakCooldown.add(id);
+
+          // Optional: small delay for "crack then break"
+          setTimeout(() => {
+            this.breakObject(groundObj);
+          }, 150);
+        }
+      }
     }
 
-    // ─────────── Player–player collision (horizontal only) ───────────
+    // Player–player collision (horizontal)
     if (this.otherPlayer) {
       const otherPos = this.otherPlayer.position;
 
@@ -251,23 +408,15 @@ export default class Player {
       }
     }
 
-    // ─────────── Checkpoints & Respawn (level logic) ───────────
+    // Checkpoints & Respawn
     const shouldStop = handleCheckpointsAndRespawn(this, newPos);
-    if (shouldStop) {
-      // We triggered a respawn via network; don't apply this falling position
-      return;
-    }
+    if (shouldStop) return;
 
-    // ─────────── Finally apply position ───────────
+    // Apply position
     this.mesh.position.copy(newPos);
   }
 
-  /**
-   * Optional, if you ever need to clean up the player completely.
-   */
   dispose() {
-    if (this.input) {
-      this.input.dispose();
-    }
+    if (this.input) this.input.dispose();
   }
 }
