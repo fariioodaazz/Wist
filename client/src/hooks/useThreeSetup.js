@@ -5,6 +5,9 @@ import * as THREE from "three";
 import Player from "../components/player/Player.js";
 import { loadAllLevels } from "../components/Levels.js";
 
+import momUrl from "../assets/Models/mom.glb";
+import urotsukiUrl from "../assets/Models/urotsuki.glb";
+
 export function useThreeSetup({ containerRef, threeRef, network, role }) {
   useEffect(() => {
     const width = window.innerWidth;
@@ -58,7 +61,7 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const ambient = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambient);
 
-    // Load all levels (platforms array)
+    // Load levels/platforms
     const platforms = loadAllLevels(scene, role);
     const blocks = {};
     platforms.forEach((p, idx) => {
@@ -68,28 +71,41 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
       }
     });
 
-    // Remote player cube
-    const remotePlayer = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 2, 2),
-      new THREE.MeshStandardMaterial({ color: 0x777777 })
-    );
-    remotePlayer.position.set(2, 3, 0);
-    remotePlayer.castShadow = true;
-    remotePlayer.receiveShadow = true;
-    scene.add(remotePlayer);
-
-    // Initial spawn (can be overridden later by world/playerPositions effect)
+    // Spawns
     const spawnPos = new THREE.Vector3(0, 3, 0);
+    const remoteSpawn = new THREE.Vector3(2, 3, 0);
 
-    // Local Player using your Player class
+    // Camera follow offset (must exist for your follow code)
+    const cameraOffset = new THREE.Vector3(14, 18, 14);
+
+    // Role-based models:
+    // host => mom, client => urotsuki
+    const localModelUrl = role === "host" ? momUrl : urotsukiUrl;
+    const remoteRole = role === "host" ? "client" : "host";
+    const remoteModelUrl = remoteRole === "host" ? momUrl : urotsukiUrl;
+
+    // Remote avatar as Player instance (NO physics update, only mixer + position from network)
+    const remotePlayer = new Player(scene, platforms, {
+      position: remoteSpawn,
+      speed: 0,
+      jumpSpeed: 0,
+      gravity: 0,
+      network: null,
+      otherPlayer: null,
+      role: remoteRole,
+      modelUrl: remoteModelUrl,
+    });
+
+    // Local player (full physics/input)
     const player = new Player(scene, platforms, {
       position: spawnPos,
       speed: 10,
       jumpSpeed: 24,
       gravity: -50,
       network,
-      otherPlayer: remotePlayer,
+      otherPlayer: remotePlayer.mesh, // collide vs remote avatar root
       role,
+      modelUrl: localModelUrl,
     });
 
     threeRef.current = {
@@ -102,14 +118,55 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
       platforms,
       blocks,
       zoom,
+      cameraOffset,
     };
 
-    // Network: remote movement & object updates
+    // Network handlers
+    let lastRemotePos = new THREE.Vector3(
+      remoteSpawn.x,
+      remoteSpawn.y,
+      remoteSpawn.z
+    );
+
     if (network) {
       network.on("remotePlayerMove", ({ position }) => {
         const { remotePlayer } = threeRef.current;
         if (!remotePlayer) return;
-        remotePlayer.position.set(position.x, position.y, position.z);
+
+        // Move remote avatar
+        remotePlayer.mesh.position.set(position.x, position.y, position.z);
+
+        // Walk/Idle based on movement
+        const moved =
+          remotePlayer.mesh.position.distanceToSquared(lastRemotePos) > 0.0001;
+
+        if (moved) {
+          // Prefer Walking, fallback to Idle/Rest if names differ
+          if (remotePlayer.actions?.[remotePlayer.clipNames.walk]) {
+            remotePlayer.fadeToAction(remotePlayer.clipNames.walk, 0.15);
+          } else if (remotePlayer.actions?.["Walk"]) {
+            remotePlayer.fadeToAction("Walk", 0.15);
+          } else if (remotePlayer.actions?.[remotePlayer.clipNames.idle]) {
+            remotePlayer.fadeToAction(remotePlayer.clipNames.idle, 0.15);
+          }
+        } else {
+          if (remotePlayer.actions?.[remotePlayer.clipNames.idle]) {
+            remotePlayer.fadeToAction(remotePlayer.clipNames.idle, 0.2);
+          } else if (remotePlayer.actions?.[remotePlayer.clipNames.rest]) {
+            remotePlayer.fadeToAction(remotePlayer.clipNames.rest, 0.2);
+          }
+        }
+
+        // Face movement direction (optional but nice)
+        if (moved) {
+          const dx = remotePlayer.mesh.position.x - lastRemotePos.x;
+          const dz = remotePlayer.mesh.position.z - lastRemotePos.z;
+          if (dx * dx + dz * dz > 0.000001) {
+            remotePlayer.mesh.rotation.y = Math.atan2(dx, dz);
+          }
+        }
+
+        lastRemotePos.copy(remotePlayer.mesh.position);
       });
 
       network.on("objectUpdated", ({ objectId, state }) => {
@@ -124,8 +181,9 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const clock = new THREE.Clock();
 
     const animate = () => {
-      const { renderer, scene, camera, player, cameraOffset } =
+      const { renderer, scene, camera, player, remotePlayer, cameraOffset } =
         threeRef.current;
+
       if (!renderer || !scene || !camera || !player) {
         threeRef.current.animationId = requestAnimationFrame(animate);
         return;
@@ -134,12 +192,19 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
       let delta = clock.getDelta();
       const MAX_DELTA = 0.05;
       if (delta > MAX_DELTA) delta = MAX_DELTA;
+
       if (delta <= 0) {
         threeRef.current.animationId = requestAnimationFrame(animate);
         return;
       }
 
+      // Local physics + local animations
       player.update(delta);
+
+      // Remote animations ONLY (remote position comes from network handler)
+      if (remotePlayer) remotePlayer.updateMixerOnly(delta);
+
+      // Send local movement
       if (network) {
         const p = player.mesh.position;
         network.sendPlayerMove({ x: p.x, y: p.y, z: p.z });
@@ -159,15 +224,16 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const onResize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      const aspect = w / h;
+      const a = w / h;
       const { camera, renderer, zoom } = threeRef.current;
       if (!camera || !renderer) return;
 
-      camera.left = -aspect * zoom;
-      camera.right = aspect * zoom;
+      camera.left = -a * zoom;
+      camera.right = a * zoom;
       camera.top = zoom;
       camera.bottom = -zoom;
       camera.updateProjectionMatrix();
+
       renderer.setSize(w, h);
     };
     window.addEventListener("resize", onResize);
@@ -181,5 +247,5 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
         container.removeChild(renderer.domElement);
       }
     };
-  }, [containerRef, threeRef, network]);
+  }, [containerRef, threeRef, network, role]);
 }

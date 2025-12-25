@@ -29,17 +29,6 @@ export default function MainMenu({
           <p className="subtitle"></p>
         </div>
 
-        {/* Menu buttons */}
-        <div className="menu-buttons">
-          <button
-            className={`menu-btn play-btn ${!user ? "menu-btn-disabled" : ""}`}
-            onClick={onPlay}
-            disabled={!user}
-          >
-            <span className="btn-text">PLAY</span>
-          </button>
-        </div>
-
         {/* Auth panel */}
         <div className="auth-panel">
           {user ? (

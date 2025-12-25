@@ -1,7 +1,5 @@
 // hooks/useRoleColors.js
 import { useEffect } from "react";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import urotsukiUrl from "../assets/Models/urotsuki.glb";
 
 export function useRoleSetup({ role, threeRef }) {
   useEffect(() => {
@@ -31,8 +29,9 @@ export function useRoleSetup({ role, threeRef }) {
       gravity = -40;
     }
 
-    player.mesh.material.color.setHex(localHex);
-    remotePlayer.material.color.setHex(remoteHex);
+    // player.mesh.material.color.setHex(localHex);
+
+    // remotePlayer.material.color.setHex(remoteHex);
 
     player.speed = speed;
     player.jumpSpeed = jumpSpeed;

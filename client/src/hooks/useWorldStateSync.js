@@ -29,6 +29,30 @@ function resetLocalPhysics(player) {
   player.onGround = false;
 }
 
+/**
+ * ✅ Works whether target is:
+ * - THREE.Object3D (Mesh/Group) -> has .position
+ * - your Player class instance -> has .mesh.position
+ */
+function setTargetPosition(target, x, y, z) {
+  if (!target) return;
+
+  // Player instance
+  if (
+    target.mesh &&
+    target.mesh.position &&
+    typeof target.mesh.position.set === "function"
+  ) {
+    target.mesh.position.set(x, y, z);
+    return;
+  }
+
+  // THREE.Object3D (Mesh/Group)
+  if (target.position && typeof target.position.set === "function") {
+    target.position.set(x, y, z);
+  }
+}
+
 export function useWorldStateSync({
   roomId,
   world,
@@ -41,13 +65,12 @@ export function useWorldStateSync({
   const lastRespawnTokenRef = useRef(null);
   const didInitialPlacementRef = useRef(false);
 
-  // when changing rooms / rejoining, allow initial placement + respawn logic to run again
   useEffect(() => {
     lastRespawnTokenRef.current = null;
     didInitialPlacementRef.current = false;
   }, [roomId]);
 
-  // Run once when room state is available to place players correctly.
+  // Initial placement
   useEffect(() => {
     const { scene, player, remotePlayer } = threeRef.current || {};
     if (!scene || !world || !player || !remotePlayer || !role || !puzzleState)
@@ -64,19 +87,23 @@ export function useWorldStateSync({
     const clientFinal = clientSaved ?? spawns.client;
 
     if (role === "host") {
-      player.mesh.position.set(hostFinal.x, hostFinal.y, hostFinal.z);
-      remotePlayer.position.set(clientFinal.x, clientFinal.y, clientFinal.z);
+      setTargetPosition(player, hostFinal.x, hostFinal.y, hostFinal.z);
+      setTargetPosition(
+        remotePlayer,
+        clientFinal.x,
+        clientFinal.y,
+        clientFinal.z
+      );
     } else {
-      player.mesh.position.set(clientFinal.x, clientFinal.y, clientFinal.z);
-      remotePlayer.position.set(hostFinal.x, hostFinal.y, hostFinal.z);
+      setTargetPosition(player, clientFinal.x, clientFinal.y, clientFinal.z);
+      setTargetPosition(remotePlayer, hostFinal.x, hostFinal.y, hostFinal.z);
     }
 
     resetLocalPhysics(player);
-
     didInitialPlacementRef.current = true;
   }, [world, role, puzzleState, playerPositions, threeRef]);
 
-  // Trigger when respawnToken changes.
+  // Respawn token handling
   useEffect(() => {
     const { scene, player, remotePlayer, blocks } = threeRef.current || {};
     if (!scene || !world || !player || !remotePlayer || !role || !puzzleState)
@@ -84,7 +111,6 @@ export function useWorldStateSync({
 
     const token = puzzleState?.respawnToken;
 
-    // Only respawn when token exists and changes
     if (!token) return;
     if (lastRespawnTokenRef.current === token) return;
     lastRespawnTokenRef.current = token;
@@ -96,11 +122,16 @@ export function useWorldStateSync({
     const clientSpawn = spawns.client;
 
     if (role === "host") {
-      player.mesh.position.set(hostSpawn.x, hostSpawn.y, hostSpawn.z);
-      remotePlayer.position.set(clientSpawn.x, clientSpawn.y, clientSpawn.z);
+      setTargetPosition(player, hostSpawn.x, hostSpawn.y, hostSpawn.z);
+      setTargetPosition(
+        remotePlayer,
+        clientSpawn.x,
+        clientSpawn.y,
+        clientSpawn.z
+      );
     } else {
-      player.mesh.position.set(clientSpawn.x, clientSpawn.y, clientSpawn.z);
-      remotePlayer.position.set(hostSpawn.x, hostSpawn.y, hostSpawn.z);
+      setTargetPosition(player, clientSpawn.x, clientSpawn.y, clientSpawn.z);
+      setTargetPosition(remotePlayer, hostSpawn.x, hostSpawn.y, hostSpawn.z);
     }
 
     resetLocalPhysics(player);
@@ -113,7 +144,6 @@ export function useWorldStateSync({
 
         blockMesh.position.copy(init);
 
-        // If host is authoritative, sync reset to others
         if (role === "host" && player.network && blockMesh.userData?.id) {
           player.network.sendObjectUpdate(blockMesh.userData.id, {
             x: blockMesh.position.x,
