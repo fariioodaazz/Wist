@@ -25,18 +25,20 @@ export default class Player {
       network = null,
       otherPlayer = null,
       role = "client",
+      modelScale = 1,
     } = options;
 
     this.network = network;
     this.otherPlayer = otherPlayer;
     this.role = role;
+    this.modelScale = modelScale;
 
     // Root group that represents the player (position + rotation live here)
     this.mesh = new THREE.Group();
     this.mesh.position.copy(position);
     scene.add(this.mesh);
 
-    // Invisible collider (kept for debugging / future)
+    // Invisible collider
     this.collider = new THREE.Mesh(geometry, material);
     this.collider.visible = false;
     this.mesh.add(this.collider);
@@ -63,6 +65,8 @@ export default class Player {
     this.jumpSpeed = jumpSpeed;
     this.gravity = gravity;
     this.onGround = false;
+    this.lastGroundObject = null;
+    this.breakCooldown = new Set();
 
     // Checkpoint flags
     this._reachedLevel2 = false;
@@ -89,11 +93,16 @@ export default class Player {
       (gltf) => {
         this.model = gltf.scene;
 
-        this.model.scale.set(5, 5, 5);
+        const s =
+          typeof this.modelScale === "number"
+            ? new THREE.Vector3(
+                this.modelScale,
+                this.modelScale,
+                this.modelScale
+              )
+            : this.modelScale;
 
-        // Attach to player group so it follows player position
-        // Usually you need to offset model down to stand on ground.
-        this.model.position.set(0, -this.playerHalfHeight, 0);
+        this.model.scale.copy(s);
 
         this.model.traverse((obj) => {
           if (obj.isMesh) {
@@ -143,7 +152,7 @@ export default class Player {
     this.activeAction = next;
   }
 
-  // ✅ For remote avatars: update animations ONLY (no input/physics)
+  // For remote avatars: update animations ONLY
   updateMixerOnly(delta) {
     if (this.mixer) this.mixer.update(delta);
   }
@@ -154,6 +163,26 @@ export default class Player {
     if (hits.length === 0) return null;
     const hit = hits[0];
     return hit.distance <= maxDistance ? hit : null;
+  }
+
+  breakObject(obj) {
+    if (!obj || !obj.userData?.id) return;
+
+    // Hide + disable collisions by moving far away (simple & safe)
+    obj.visible = false;
+    obj.userData.broken = true;
+    obj.position.set(99999, 99999, 99999);
+
+    // Sync to client
+    if (this.network) {
+      this.network.sendObjectUpdate(obj.userData.id, {
+        broken: true,
+        x: obj.position.x,
+        y: obj.position.y,
+        z: obj.position.z,
+        visible: false,
+      });
+    }
   }
 
   update(delta) {
@@ -332,6 +361,27 @@ export default class Player {
       newPos.y = groundY + this.playerHalfHeight;
       this.velocity.y = 0;
       this.onGround = true;
+
+      const groundObj = hitDown.object;
+      this.lastGroundObject = groundObj;
+
+      const isBreakable = !!groundObj?.userData?.isBreakable;
+      const onlyMom = !!groundObj?.userData?.onlyMomBreaks;
+
+      const isMom = this.role === "host";
+
+      const canBreak = isBreakable && (!onlyMom || isMom);
+      if (canBreak) {
+        const id = groundObj.userData?.id;
+        if (id && !this.breakCooldown.has(id)) {
+          this.breakCooldown.add(id);
+
+          // Optional: small delay for "crack then break"
+          setTimeout(() => {
+            this.breakObject(groundObj);
+          }, 150);
+        }
+      }
     }
 
     // Player–player collision (horizontal)

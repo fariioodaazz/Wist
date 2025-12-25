@@ -29,11 +29,6 @@ function resetLocalPhysics(player) {
   player.onGround = false;
 }
 
-/**
- * ✅ Works whether target is:
- * - THREE.Object3D (Mesh/Group) -> has .position
- * - your Player class instance -> has .mesh.position
- */
 function setTargetPosition(target, x, y, z) {
   if (!target) return;
 
@@ -51,6 +46,20 @@ function setTargetPosition(target, x, y, z) {
   if (target.position && typeof target.position.set === "function") {
     target.position.set(x, y, z);
   }
+}
+
+function resetBreakable(mesh) {
+  if (!mesh) return;
+
+  const st = mesh.userData?.initialState;
+  if (!st) return;
+
+  mesh.position.copy(st.position);
+  mesh.rotation.copy(st.rotation);
+  mesh.scale.copy(st.scale);
+
+  mesh.visible = st.visible ?? true;
+  mesh.userData.broken = false;
 }
 
 export function useWorldStateSync({
@@ -135,20 +144,27 @@ export function useWorldStateSync({
     }
 
     resetLocalPhysics(player);
-
+    if (player.breakCooldown?.clear) player.breakCooldown.clear();
+    // Reset blocks on respawn
     // Reset blocks on respawn
     if (blocks) {
       Object.values(blocks).forEach((blockMesh) => {
-        const init = blockMesh.userData?.initialPosition;
-        if (!init) return;
+        const initPos =
+          blockMesh.userData?.initialPosition ??
+          blockMesh.userData?.initialState?.position;
 
-        blockMesh.position.copy(init);
+        if (initPos) blockMesh.position.copy(initPos);
+
+        // This will restore visible + broken=false using initialState
+        resetBreakable(blockMesh);
 
         if (role === "host" && player.network && blockMesh.userData?.id) {
           player.network.sendObjectUpdate(blockMesh.userData.id, {
             x: blockMesh.position.x,
             y: blockMesh.position.y,
             z: blockMesh.position.z,
+            broken: false,
+            visible: true,
           });
         }
       });

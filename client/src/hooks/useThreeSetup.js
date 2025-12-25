@@ -65,7 +65,7 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const platforms = loadAllLevels(scene, role);
     const blocks = {};
     platforms.forEach((p, idx) => {
-      if (p.userData && p.userData.isPushable) {
+      if (p.userData && (p.userData.isPushable || p.userData.isBreakable)) {
         const id = p.userData.id || `block-${idx}`;
         blocks[id] = p;
       }
@@ -75,16 +75,24 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
     const spawnPos = new THREE.Vector3(0, 3, 0);
     const remoteSpawn = new THREE.Vector3(2, 3, 0);
 
-    // Camera follow offset (must exist for your follow code)
+    // Camera follow offset
     const cameraOffset = new THREE.Vector3(14, 18, 14);
 
     // Role-based models:
     // host => mom, client => urotsuki
-    const localModelUrl = role === "host" ? momUrl : urotsukiUrl;
-    const remoteRole = role === "host" ? "client" : "host";
-    const remoteModelUrl = remoteRole === "host" ? momUrl : urotsukiUrl;
+    const CHAR = {
+      mom: { url: momUrl, scale: 6.0 },
+      uro: { url: urotsukiUrl, scale: 5.0 },
+    };
 
-    // Remote avatar as Player instance (NO physics update, only mixer + position from network)
+    // Who is who in the game
+    const localCharKey = role === "host" ? "mom" : "uro";
+    const remoteCharKey = role === "host" ? "uro" : "mom";
+
+    const localRole = role;
+    const remoteRole = role === "host" ? "client" : "host";
+
+    // Remote avatar as Player instance
     const remotePlayer = new Player(scene, platforms, {
       position: remoteSpawn,
       speed: 0,
@@ -93,7 +101,8 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
       network: null,
       otherPlayer: null,
       role: remoteRole,
-      modelUrl: remoteModelUrl,
+      modelUrl: CHAR[remoteCharKey].url,
+      modelScale: CHAR[remoteCharKey].scale,
     });
 
     // Local player (full physics/input)
@@ -103,9 +112,10 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
       jumpSpeed: 24,
       gravity: -50,
       network,
-      otherPlayer: remotePlayer.mesh, // collide vs remote avatar root
+      otherPlayer: remotePlayer.mesh,
       role,
-      modelUrl: localModelUrl,
+      modelUrl: CHAR[localCharKey].url,
+      modelScale: CHAR[localCharKey].scale,
     });
 
     threeRef.current = {
@@ -157,7 +167,7 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
           }
         }
 
-        // Face movement direction (optional but nice)
+        // Face movement direction
         if (moved) {
           const dx = remotePlayer.mesh.position.x - lastRemotePos.x;
           const dz = remotePlayer.mesh.position.z - lastRemotePos.z;
@@ -171,9 +181,30 @@ export function useThreeSetup({ containerRef, threeRef, network, role }) {
 
       network.on("objectUpdated", ({ objectId, state }) => {
         const { blocks } = threeRef.current;
-        const mesh = blocks[objectId];
+        const mesh = blocks?.[objectId];
         if (!mesh || !state) return;
-        mesh.position.set(state.x, state.y, state.z);
+
+        // Position updates
+        if (typeof state.x === "number") {
+          mesh.position.set(state.x, state.y, state.z);
+        }
+
+        // Apply broken BOTH ways
+        if (typeof state.broken === "boolean") {
+          mesh.userData.broken = state.broken;
+
+          if (state.broken) {
+            mesh.visible = false;
+            return;
+          } else {
+            mesh.visible = true;
+          }
+        }
+
+        // Apply visible if explicitly provided (overrides)
+        if (typeof state.visible === "boolean") {
+          mesh.visible = state.visible;
+        }
       });
     }
 
